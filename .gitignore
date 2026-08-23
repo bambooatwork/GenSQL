@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# sqlmap / GenSQL runtime
+output/
+/tmp/
+*.log
+*.sqlite
+*.db
+hashdb.sqlite
+*.har
+
+# Reports (generated at runtime)
+gensql_report.html
+gensql_report.json
+gensql_report.md
+
+# Compiled Python
+*.pyc
+
+# Temp
+*.bak
+*.tmp
