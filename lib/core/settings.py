@@ -23,16 +23,16 @@ from thirdparty import six
 VERSION = "1.10.8.55"
 TYPE = "dev" if VERSION.count('.') > 2 and VERSION.split('.')[-1] != '0' else "stable"
 TYPE_COLORS = {"dev": 33, "stable": 90, "pip": 34}
-VERSION_STRING = "sqlmap/%s#%s" % ('.'.join(VERSION.split('.')[:-1]) if VERSION.count('.') > 2 and VERSION.split('.')[-1] == '0' else VERSION, TYPE)
-DESCRIPTION = "automatic SQL injection and database takeover tool"
-SITE = "https://sqlmap.org"
+VERSION_STRING = "GenSQL/2.0.0"
+DESCRIPTION = "Next-Generation Web Security Assessment Framework"
+SITE = "https://github.com/bambooatwork/GenSQL"
 DEFAULT_USER_AGENT = "%s (%s)" % (VERSION_STRING, SITE)
 DEV_EMAIL_ADDRESS = "dev@sqlmap.org"
-ISSUES_PAGE = "https://github.com/sqlmapproject/sqlmap/issues/new"
-GIT_REPOSITORY = "https://github.com/sqlmapproject/sqlmap.git"
-GIT_PAGE = "https://github.com/sqlmapproject/sqlmap"
-WIKI_PAGE = "https://github.com/sqlmapproject/sqlmap/wiki/"
-ZIPBALL_PAGE = "https://github.com/sqlmapproject/sqlmap/zipball/master"
+ISSUES_PAGE = "https://github.com/bambooatwork/GenSQL/issues/new"
+GIT_REPOSITORY = "https://github.com/bambooatwork/GenSQL.git"
+GIT_PAGE = "https://github.com/bambooatwork/GenSQL"
+WIKI_PAGE = "https://github.com/bambooatwork/GenSQL/wiki/"
+ZIPBALL_PAGE = "https://github.com/bambooatwork/GenSQL/archive/refs/heads/main.zip"
 
 # GenSQL enhanced version info (by Jeevraj)
 JEEVSQL_VERSION = "2.0.0"
@@ -782,7 +782,7 @@ ASP_NET_CONTROL_REGEX = r"(?i)\Actl\d+\$"
 GOOGLE_ANALYTICS_COOKIE_REGEX = r"(?i)\A(_ga|_gid|_gat|_gcl_au|__utm[abcz])"
 
 # Prefix for configuration overriding environment variables
-SQLMAP_ENVIRONMENT_PREFIX = "SQLMAP_"
+SQLMAP_ENVIRONMENT_PREFIX = "GENSQL_"
 
 # General OS environment variables that can be used for setting proxy address
 PROXY_ENVIRONMENT_VARIABLES = ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY")
@@ -824,7 +824,7 @@ IGNORE_SPACE_AFFECTED_KEYWORDS = ("CAST", "COUNT", "EXTRACT", "GROUP_CONCAT", "M
 # Keywords expected to be in UPPERCASE in getValue()
 GET_VALUE_UPPERCASE_KEYWORDS = ("SELECT", "FROM", "WHERE", "DISTINCT", "COUNT")
 
-LEGAL_DISCLAIMER = "Usage of sqlmap for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. Developers assume no liability and are not responsible for any misuse or damage caused by this program"
+LEGAL_DISCLAIMER = "Usage of GenSQL for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. The author (Jeevraj) assumes no liability and is not responsible for any misuse or damage caused by this tool"
 
 # After this number of misses reflective removal mechanism is turned off (for speed up reasons)
 REFLECTIVE_MISS_THRESHOLD = 20
@@ -1080,7 +1080,7 @@ GRAPHQL_ARG_WORDLIST = ("id", "username", "user", "name", "term", "query", "q", 
 # Canonical GraphQL introspection query (the one everyone copy-pastes). Returned schema carries the
 # full type system: query/mutation/subscription roots, OBJECT/INPUT_OBJECT/ENUM/SCALAR types, their
 # fields/arguments/inputFields with type chains, directives, and deprecation metadata.
-GRAPHQL_INTROSPECTION_QUERY = """query IntrospectionForSqlmap {
+GRAPHQL_INTROSPECTION_QUERY = """query IntrospectionQuery {
   __schema {
     queryType { name }
     mutationType { name }

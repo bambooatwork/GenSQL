@@ -367,7 +367,7 @@ class Backend(object):
             warnMsg += "this could be a false positive case"
             logger.warning(warnMsg)
 
-            msg = "sqlmap previously fingerprinted back-end DBMS as "
+            msg = "GenSQL previously fingerprinted back-end DBMS as "
             msg += "%s. However now it has been fingerprinted " % kb.dbms
             msg += "as %s. " % dbms
             msg += "Please, specify which DBMS should be "
@@ -427,7 +427,7 @@ class Backend(object):
 
         # Little precaution, in theory this condition should always be false
         elif kb.os is not None and isinstance(os, six.string_types) and kb.os.lower() != os.lower():
-            msg = "sqlmap previously fingerprinted back-end DBMS "
+            msg = "GenSQL previously fingerprinted back-end DBMS "
             msg += "operating system %s. However now it has " % kb.os
             msg += "been fingerprinted to be %s. " % os
             msg += "Please, specify which OS is "

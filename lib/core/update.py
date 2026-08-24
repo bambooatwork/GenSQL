@@ -42,7 +42,7 @@ def update():
         infoMsg += "PyPI repository"
         logger.info(infoMsg)
 
-        debugMsg = "sqlmap will try to update itself using 'pip' command"
+        debugMsg = "GenSQL will try to update itself using 'pip' command"
         logger.debug(debugMsg)
 
         dataToStdout("\r[%s] [INFO] update in progress" % time.strftime("%X"))
@@ -128,7 +128,7 @@ def update():
         infoMsg += "GitHub repository"
         logger.info(infoMsg)
 
-        debugMsg = "sqlmap will try to update itself using 'git' command"
+        debugMsg = "GenSQL will try to update itself using 'git' command"
         logger.debug(debugMsg)
 
         dataToStdout("\r[%s] [INFO] update in progress" % time.strftime("%X"))

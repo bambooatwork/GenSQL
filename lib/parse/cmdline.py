@@ -316,7 +316,7 @@ def cmdLineParser(argv=None):
             help="Evaluate provided Python code before the request (e.g. \"import hashlib;id2=hashlib.md5(id).hexdigest()\")")
 
         # Optimization options
-        optimization = parser.add_argument_group("Optimization", "These options can be used to optimize the performance of sqlmap")
+        optimization = parser.add_argument_group("Optimization", "These options can be used to optimize GenSQL scan performance")
 
         optimization.add_argument("-o", dest="optimize", action="store_true",
             help="Turn on all optimization switches")
@@ -332,7 +332,7 @@ def cmdLineParser(argv=None):
             help="Max number of concurrent HTTP(s) requests (default %d)" % defaults.threads)
 
         # Injection options
-        injection = parser.add_argument_group("Injection", "These options can be used to specify which parameters to test for, provide custom injection payloads and optional tampering scripts")
+        injection = parser.add_argument_group("Injection", "These options specify which parameters to test, custom payloads, and tampering scripts")
 
         injection.add_argument("-p", dest="testParameter",
             help="Testable parameter(s)")
@@ -692,7 +692,7 @@ def cmdLineParser(argv=None):
             help="Check Internet connection before assessing the target")
 
         general.add_argument("--cleanup", dest="cleanup", action="store_true",
-            help="Clean up the DBMS from sqlmap specific UDF and tables")
+            help="Clean up DBMS-specific UDF and tables created during the scan")
 
         general.add_argument("--crawl", dest="crawlDepth", type=int,
             help="Crawl the website starting from the target URL")
@@ -842,7 +842,7 @@ def cmdLineParser(argv=None):
             help="Beep on question and/or when vulnerability is found")
 
         miscellaneous.add_argument("--dependencies", dest="dependencies", action="store_true",
-            help="Check for missing (optional) sqlmap dependencies")
+            help="Check for missing (optional) GenSQL dependencies")
 
         miscellaneous.add_argument("--disable-coloring", dest="disableColoring", action="store_true",
             help="Disable console output coloring")
@@ -866,13 +866,13 @@ def cmdLineParser(argv=None):
             help="Work in offline mode (only use session data)")
 
         miscellaneous.add_argument("--purge", dest="purge", action="store_true",
-            help="Safely remove all content from sqlmap data directory")
+            help="Safely remove all GenSQL session data and cache")
 
         miscellaneous.add_argument("--results-file", dest="resultsFile",
             help="Location of CSV results file in multiple targets mode")
 
         miscellaneous.add_argument("--shell", dest="shell", action="store_true",
-            help="Prompt for an interactive sqlmap shell")
+            help="Prompt for an interactive GenSQL shell")
 
         miscellaneous.add_argument("--tmp-dir", dest="tmpDir",
             help="Local directory for storing temporary files")
@@ -884,7 +884,7 @@ def cmdLineParser(argv=None):
             help="Adjust options for unstable connections")
 
         miscellaneous.add_argument("--update", dest="updateAll", action="store_true",
-            help="Update sqlmap")
+            help="Update GenSQL to the latest version")
 
         miscellaneous.add_argument("--wizard", dest="wizard", action="store_true",
             help="Simple wizard interface for beginner users")
@@ -1059,7 +1059,7 @@ def cmdLineParser(argv=None):
 
             while True:
                 command = None
-                prompt = "sqlmap > "
+                prompt = "gensql > "
 
                 try:
                     # Note: in Python2 command should not be converted to Unicode before passing to shlex (Reference: https://bugs.python.org/issue1170)
