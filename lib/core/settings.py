@@ -51,7 +51,7 @@ BANNER = """\033[01;33m\
       |_|V...       |_|   \033[0m\033[4;37m%s\033[0m\n
 """ % (TYPE_COLORS.get(TYPE, 31), VERSION_STRING.split('/')[-1], SITE)
 
-# GenSQL Banner - shown when running gensql.py / jeevsql.py
+# GenSQL Banner - shown when running gensql.py
 JEEVSQL_BANNER = """\033[01;36m
   ██████╗ ███████╗███╗   ██╗███████╗ ██████╗ ██╗
  ██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔═══██╗██║
@@ -61,7 +61,7 @@ JEEVSQL_BANNER = """\033[01;36m
   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝ ╚══▀▀═╝ ╚══════╝\033[0m
 \033[01;33m                          by Jeevraj\033[0m
 \033[0;37m  Next-Generation SQL Injection & Web Security Assessment Framework\033[0m
-\033[01;32m  Version: 2.0.0  |  Built on sqlmap v1.10.8\033[0m
+\033[01;32m  Version: 2.0.0\033[0m
 \033[01;35m  Features: AI-WAF-Bypass | Async Engine | GraphQL | NoSQL | JWT | gRPC | Cloud\033[0m
 \033[0;37m  ─────────────────────────────────────────────────────────────────────────────\033[0m
 """
