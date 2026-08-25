@@ -492,9 +492,9 @@ class HTTPErrorBypass:
     def get_stats(self):
         return dict(self._stats)
 
-    def best_bypass(self, url, method="GET", payload=None):
+    def best_bypass(self, url, method="GET", payload=None, error_code=None):
         """Return the single most effective bypass for a URL, or None."""
-        results = self.auto_bypass(url, method, payload)
+        results = self.auto_bypass(url, method, payload, error_code=error_code)
         if results["bypasses"]:
             return results["bypasses"][0]
         return None

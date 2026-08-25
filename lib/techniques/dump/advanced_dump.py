@@ -342,10 +342,13 @@ class AdvancedDumpEngine:
             return []
 
         rows = []
-        for row in range(max_rows):
+        for _row_idx in range(max_rows):
             value = ""
             for pos in range(1, max_len + 1):
-                ch = self._blind_binary_char(payload_tpl, pos, tbl, col)
+                try:
+                    ch = self._blind_binary_char(payload_tpl, pos, tbl, col)
+                except Exception:
+                    ch = ""
                 if not ch:
                     break
                 value += ch
@@ -569,9 +572,12 @@ class AdvancedDumpEngine:
                 if val:
                     all_rows.append({col: val})
 
-        # Annotate with type classification
+        # Annotate with type classification (iterate over snapshot of keys)
         for row in all_rows:
-            for k, v in row.items():
+            for k in list(row.keys()):
+                v = row[k]
+                if k.startswith("__"):
+                    continue
                 dtype = classify_value(v)
                 if dtype not in ("string", "integer", "unknown"):
                     row["__type_%s" % k] = dtype
@@ -653,7 +659,10 @@ class AdvancedDumpEngine:
             if rows:
                 # Classify each password field
                 for row in rows:
-                    for k, v in row.items():
+                    for k in list(row.keys()):
+                        v = row.get(k, "")
+                        if k.startswith("__"):
+                            continue
                         if v and isinstance(v, str) and len(v) > 10:
                             dtype = classify_value(v)
                             row["__hash_type_%s" % k] = dtype

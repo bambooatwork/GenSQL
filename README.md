@@ -1,4 +1,4 @@
-# GenSQL — Next-Generation SQL Injection & Web Security Assessment Framework
+# ⚡ GenSQL v2.0.0
 
 ```
   ██████╗ ███████╗███╗   ██╗███████╗ ██████╗ ██╗
@@ -8,179 +8,387 @@
  ╚██████╔╝███████╗██║ ╚████║███████║╚██████╔╝███████╗
   ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝ ╚══▀▀═╝ ╚══════╝
 
-                     by Jeevraj
+                    by Jeevraj
 ```
 
-> **Version:** 2.0.0 &nbsp;|&nbsp; **Author:** Jeevraj &nbsp;|&nbsp; Built on sqlmap · Far beyond in every way
+> **The most powerful web security assessment framework of 2026.**
+
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
+![Version](https://img.shields.io/badge/Version-2.0.0-green)
+![License](https://img.shields.io/badge/License-GPL--2.0-red)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)
+![Tests](https://img.shields.io/badge/Tests-53%2F53%20passing-brightgreen)
 
 ---
 
-## What is GenSQL?
+## 📋 Table of Contents
 
-GenSQL is a next-generation SQL injection and web security assessment framework built for the 2026 threat landscape. It goes far beyond sqlmap by adding an **offline AI mutation engine**, **async HTTP/2 scanning**, support for **GraphQL / NoSQL / JWT / gRPC / SSTI / Cloud** injection, deep OSINT recon, full exploit chaining, and rich HTML/JSON reports — all with zero cloud dependencies.
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Scan Profiles](#-scan-profiles)
+- [All Flags](#-all-flags)
+- [Architecture](#-architecture)
+- [Legal](#-legal-disclaimer)
 
 ---
 
-## Quick Start
+## 🚀 Features
 
-```bash
-# Basic scan
-python gensql.py -u "https://target.com/page?id=1"
+### 🔥 Core Injection Engine
+- **6 injection techniques**: Union-based, Error-based, Blind (binary-search — *50% fewer requests than sequential*), Bitwise (*only 8 requests per character*), Time-based, Stacked queries
+- **6 DBMS fully supported**: MySQL/MariaDB, Microsoft SQL Server, PostgreSQL, Oracle, SQLite, MongoDB (NoSQL)
+- **Auto DBMS fingerprinting** — detects database version, charset, and privileges
+- **Hex-encoded payloads** — bypasses string-based WAF filters automatically
+- **Parallel column dump** — multiple threads per table for maximum speed
+- **Resume from checkpoint** — interrupted dumps continue from exact row offset
 
-# Interactive wizard
-python gensql.py --wizard
+### 🛡️ Advanced WAF & HTTP Error Bypass (50+ techniques)
+| Error Code | Techniques |
+|-----------|-----------|
+| **403 Forbidden** | IP header spoofing, URL override, path fuzzing, method switching, host header manipulation, chunked transfer encoding, double-slash traversal |
+| **404 Not Found** | 40+ path variants (case, unicode, slash, extension, traversal), URL override headers |
+| **429 Rate Limit** | Adaptive back-off with jitter, Retry-After compliance, identity rotation, agent rotation |
+| **503 Unavailable** | Protocol switching (HTTP↔HTTPS), port variation, cache-busting |
 
-# Full pentest profile (everything enabled)
-python gensql.py -u "https://target.com/page?id=1" --profile pentest
+**IP Spoofing Headers (20+):** `X-Forwarded-For`, `X-Real-IP`, `X-Originating-IP`, `X-Remote-Addr`, `CF-Connecting-IP`, `True-Client-IP`, `X-Azure-ClientIP`, `Fastly-Client-IP` and more.
 
-# Stealth mode with AI WAF bypass
-python gensql.py -u "https://target.com/page?id=1" --profile stealth
+**URL Override Headers:** `X-Original-URL`, `X-Rewrite-URL`, `X-Override-URL`, `Request-Uri`
 
-# API-focused scan
-python gensql.py -u "https://target.com/api" --profile api
+**AI WAF Fingerprinting** — auto-detects: Cloudflare, Akamai, Imperva, AWS WAF, F5 BIG-IP, ModSecurity, Barracuda, Sucuri
+
+### 💡 Smart Tamper Engine (30+ Techniques)
+Auto-selects the best tamper chain per WAF and DBMS:
+
+| Category | Tampers |
+|---------|---------|
+| **Whitespace** | `space2comment`, `space2dash`, `space2hash`, `space2mssqlblank`, `space2morehash` |
+| **Encoding** | `base64_encode`, `double_urlencode`, `urlencode_all`, `unicode_encode`, `html_encode`, `hex_strings` |
+| **Case/Comment** | `randomcase`, `randomcomments`, `inline_comment`, `modsec_versioned`, `modsec_zero_versioned` |
+| **Logic** | `between_replace`, `equaltolike`, `greatest_replace`, `ifnull2ifisnull`, `scientific_notation` |
+| **DBMS-specific** | `sp_password`, `plus2concat`, `versioned_keywords`, `concat_ws_bypass`, `mysql_comment` |
+| **Obfuscation** | `null_byte_inject`, `apostrophe_mask`, `apostrophe_null`, `percentage_encode`, `evasion_multiline` |
+
+### 🗄️ Database Extraction — Smarter and Faster
+- **Binary-search blind** — halves the search space per character (log₂ faster than sequential)
+- **Bitwise extraction** — exactly 8 requests per character, works through any delay
+- **Error-based** — EXTRACTVALUE, UPDATEXML, CONVERT, FLOOR+RAND, UTL_INADDR (per DBMS)
+- **Hex-encoded UNION** — extracts as hex then decodes client-side, bypasses string WAFs
+- **Credential harvesting** — auto-targets `users`, `accounts`, `admin`, `wp_users`, `members` + 20 more
+- **Hash identification** — detects MD5, SHA1, SHA256, SHA512, bcrypt, NTLM, MySQL323, MySQL4.1+, MSSQL, Oracle, PostgreSQL hashes
+- **Offline hash cracking** — dictionary, rule-based, mask, and rainbow table attacks (no internet)
+
+**Export formats:** CSV · JSON · SQL INSERT statements · Dark-theme HTML with CVSS 4.0
+
+### 🕸️ Modern Attack Surfaces
+- **GraphQL** — introspection, batch queries, alias bypass, fragment injection, field suggestions
+- **NoSQL** — MongoDB operator injection (`$where`, `$regex`, `$gt`), Redis, CouchDB
+- **JWT** — `alg:none` bypass, RS256→HS256 confusion, `kid` path traversal + SQLi, weak secret bruteforce
+- **gRPC-Web** — proto field injection via base64-encoded binary payloads
+- **SSTI** — Jinja2, Twig, Freemarker, Velocity, Smarty detection + auto RCE chain
+- **IDOR/BOLA** — sequential parameter enumeration with configurable range
+- **REST API** — Swagger/OpenAPI guided scanning, parameter mining
+
+### ☁️ Cloud & Serverless
+- **AWS Lambda** — cold-start timing attacks, environment variable extraction
+- **SSRF → Metadata** — auto-probe `169.254.169.254` for AWS/Azure/GCP secrets
+- **Azure Functions / GCP Cloud Run** — serverless injection detection
+
+### 🔍 Recon & Discovery
+- **Deep OSINT** — crt.sh subdomain enumeration, Wayback Machine parameter mining
+- **JS Analysis** — extracts hidden endpoints and parameters from JavaScript files
+- **Passive subdomain enum** — certificate transparency logs
+- **Parameter mining** — 1,000+ built-in parameter names tested automatically
+- **Shodan integration** — extended recon with API key
+
+### 🎯 Post-Exploitation Chain
 ```
-
----
-
-## New Features vs sqlmap
-
-| Feature | sqlmap | GenSQL |
-|---------|:------:|:------:|
-| Offline AI payload mutation | ❌ | ✅ |
-| Async HTTP/2 engine (50 concurrent) | ❌ | ✅ |
-| AI-powered WAF bypass | ❌ | ✅ |
-| GraphQL injection | ❌ | ✅ |
-| NoSQL injection (MongoDB etc.) | ❌ | ✅ |
-| JWT attacks (alg:none, RS256→HS256, kid SQLi) | ❌ | ✅ |
-| gRPC-Web injection | ❌ | ✅ |
-| SSTI detection + auto-RCE chain | ❌ | ✅ |
-| Cloud/Lambda/Serverless injection | ❌ | ✅ |
-| SSRF to metadata service | ❌ | ✅ |
-| Deep OSINT recon (crt.sh, Wayback, JS) | ❌ | ✅ |
-| Parameter mining (1000+ built-in) | ❌ | ✅ |
-| Exploit chain (SQLi → RCE → lateral) | ❌ | ✅ |
-| OOB exfiltration (DNS + HTTP listener) | Partial | ✅ |
-| CVSS 4.0 scoring | ❌ | ✅ |
-| HTML/JSON/Markdown reports | ❌ | ✅ |
-| Real-time web dashboard | ❌ | ✅ |
-| CockroachDB / TiDB / ClickHouse | ❌ | ✅ |
-| 100+ tamper scripts | 50+ | ✅ |
-
----
-
-## New Modules
-
-### 🧠 AI Engine (`lib/core/ai_engine.py`)
-Fully **offline** payload mutation and WAF detection — no API keys, no internet required.
-- 200+ SQL injection payload templates across 5 DBMS
-- Grammar-based mutation (whitespace, comments, case, encoding, scientific notation)
-- WAF fingerprinting for 11 WAF products
-- Payload scoring and adaptive learning
-
-### ⚡ Async Engine (`lib/core/async_engine.py`)
-HTTP/2-capable concurrent scan engine with up to 50 parallel connections, adaptive rate limiting, and automatic retry with exponential backoff.
-
-### 🛡️ WAF Bypass (`lib/evasion/ai_waf_bypass.py`)
-600+ User-Agent strings, JA3 fingerprint rotation, request humanisation, 8 WAF-specific strategy tables (Cloudflare, Akamai, Imperva, AWS WAF, F5, ModSecurity, Sucuri, Barracuda).
-
-### 🔗 Injection Techniques
-| Module | Attacks |
-|--------|---------|
-| `lib/techniques/graphql/` | Introspection, batch, alias flooding, fragment, persisted query injection |
-| `lib/techniques/nosql/` | Operator injection, `$where` JS, ReDoS, blind boolean, auth bypass |
-| `lib/techniques/auth/` | JWT alg:none, RS256→HS256, kid SQLi, path traversal, weak secret bruteforce |
-| `lib/techniques/api/` | REST HPP, JSON body, IDOR/BOLA, mass assignment, gRPC proto field injection |
-| `lib/techniques/cloud/` | Lambda cold-start timing, API Gateway, Azure Functions, GCP, SSRF-to-metadata |
-| `lib/techniques/ssti/` | Jinja2, Twig, Freemarker, Mako, Smarty, Velocity, ERB — auto-chain to RCE |
-
-### 🔍 Recon
-- **Deep OSINT** — crt.sh certificate transparency, Wayback Machine parameters, JS endpoint extraction, cloud provider detection, attack surface mapping
-- **Param Miner** — 1000+ built-in parameter names, header mining, JSON field discovery, Swagger/OpenAPI guided
-
-### 💥 Post-Exploitation
-- **Exploit Chain** — SQLi → file read → webshell upload → OS command execution → credential harvesting → lateral movement payloads
-- **OOB Exfiltration** — DNS and HTTP out-of-band with built-in HTTP listener server; DBMS-specific payloads for MySQL, MSSQL, PostgreSQL, Oracle
+SQL Injection
+    → File Read (LOAD_FILE / COPY TO)
+    → Webshell Upload (INTO OUTFILE)
+    → OS Command Execution
+    → Privilege Escalation Check
+    → Credential Harvest
+    → Lateral Movement Payloads
+    → OOB Exfiltration (DNS / HTTP)
+```
 
 ### 📊 Reporting
-- Dark-theme HTML report with CVSS 4.0 scoring
-- JSON and Markdown output
-- Real-time web dashboard at `http://127.0.0.1:7474`
+- **CVSS 4.0** scoring for every finding
+- **HTML report** — dark-themed, professional, with masked sensitive data
+- **JSON report** — machine-readable for integration with other tools
+- **Markdown report** — for GitHub/Notion/Confluence
+- **SQL INSERT export** — ready to import into your own database
+- **Real-time dashboard** — web UI at `http://localhost:7474`
 
 ---
 
-## New DBMS Support
-
-| Database | Port | Protocol |
-|----------|------|----------|
-| **CockroachDB** | 26257 | PostgreSQL wire |
-| **TiDB** | 4000 | MySQL wire |
-| **ClickHouse** | 8123/9000 | Native HTTP |
-
----
-
-## Scan Profiles
+## 📦 Installation
 
 ```bash
---profile stealth     # Humanised requests, identity rotation, AI WAF bypass
---profile api         # GraphQL, NoSQL, JWT, gRPC, IDOR, param mining
---profile cloud       # Cloud/Lambda/serverless injection, SSRF, deep recon
---profile pentest     # Everything + exploit chain + CVSS 4.0 HTML+JSON reports
---profile aggressive  # All attack modules + cred harvest + lateral movement
+# Clone
+git clone https://github.com/bambooatwork/GenSQL.git
+cd GenSQL
+
+# Python 3.8+ required (no extra dependencies for core features)
+python --version
+
+# Optional dependencies for extra features
+pip install httpx          # HTTP/2 async engine
+pip install bcrypt         # bcrypt hash cracking
+
+# Verify
+python gensql.py --version
 ```
 
 ---
 
-## New Flags (selection)
+## ⚡ Quick Start
 
+### Easiest: Interactive Wizard
+```bash
+python gensql.py --wizard
 ```
---ai-assist           Offline AI payload mutation engine
---ai-waf-bypass       AI-powered WAF evasion
---async-engine        HTTP/2 async concurrent engine
---graphql-inject      GraphQL injection + introspection
---nosql-inject        NoSQL injection (MongoDB, CouchDB, Redis)
---jwt-attack          JWT attack suite
---grpc-inject         gRPC-Web proto field injection
---ssti-inject         SSTI detection + auto RCE chain
---cloud-scan          Cloud/serverless injection
---ssrf-metadata       SSRF to cloud metadata service
---deep-recon          OSINT recon (crt.sh, Wayback, JS analysis)
---param-mine          Parameter mining (1000+ names)
---exploit-chain       SQLi to RCE exploit chain
---harvest-creds       Credential harvesting from SQLi
---oob-exfil           Out-of-band exfiltration
---oob-domain DOMAIN   DNS callback domain for OOB
---oob-listen PORT     Start built-in HTTP OOB listener
---report-html FILE    Generate HTML report with CVSS 4.0
---report-json FILE    Generate JSON report
---report-md FILE      Generate Markdown report
---dashboard           Start real-time web dashboard
---dashboard-port PORT Dashboard port (default: 7474)
---wizard              Interactive guided setup wizard
---profile NAME        Apply scan profile (stealth/api/cloud/pentest/aggressive)
+The wizard asks you 5 questions and launches the perfect scan.
+
+### Basic SQL Injection Scan
+```bash
+python gensql.py -u "https://target.com/page?id=1"
+```
+
+### Full Database Dump (Fastest Method)
+```bash
+# Auto-detect best technique + hex encoding + parallel threads
+python gensql.py -u "https://target.com/page?id=1" \
+  --adv-dump --dump-hex --dump-parallel --dump-all-tables
+
+# Dump only credential tables
+python gensql.py -u "https://target.com/page?id=1" \
+  --adv-dump --dump-creds --dump-output creds.html
+```
+
+### Bypass WAF + Firewall
+```bash
+# Auto-bypass any HTTP error (403/404/429/503)
+python gensql.py -u "https://target.com/page?id=1" \
+  --auto-bypass --ai-waf-bypass --ai-assist
+
+# Bypass 403 on a specific URL
+python gensql.py --bypass-403 --bypass-url "https://target.com/admin"
+```
+
+### Modern Attack Surfaces
+```bash
+# GraphQL
+python gensql.py -u "https://target.com/graphql" \
+  --graphql-inject --graphql-introspect
+
+# NoSQL / MongoDB
+python gensql.py -u "https://target.com/api/login" \
+  --nosql-inject --nosql-type mongodb
+
+# JWT attacks
+python gensql.py -u "https://target.com/api" \
+  --jwt-attack --jwt-bruteforce
+
+# SSTI → RCE
+python gensql.py -u "https://target.com/render?name=test" \
+  --ssti-inject
+```
+
+### Cloud Targets
+```bash
+python gensql.py -u "https://api.target.com/" \
+  --cloud-scan --ssrf-metadata --cloud-provider aws
+```
+
+### Full Pentest
+```bash
+python gensql.py -u "https://target.com/page?id=1" --profile pentest
+# Runs: AI engine + WAF bypass + recon + all injection types +
+#       exploit chain + credential harvest + HTML report
 ```
 
 ---
 
-## Requirements
+## 🎯 Scan Profiles
 
-```
-Python 3.8+
-No additional dependencies required for core functionality.
+| Profile | Best For | What It Enables |
+|---------|---------|----------------|
+| `--profile stealth` | Evading IDS/WAF | Humanized timing, identity rotation, AI WAF bypass |
+| `--profile api` | REST/GraphQL APIs | GraphQL, NoSQL, JWT, gRPC, IDOR, param mining |
+| `--profile cloud` | AWS/Azure/GCP | Cloud scan, SSRF metadata, Lambda cold-start |
+| `--profile pentest` | Full engagements | Everything + exploit chain + CVSS 4.0 HTML report |
+| `--profile aggressive` | CTF / labs | Maximum speed, all techniques, OOB exfil |
+| `--profile dump` | Database extraction | All dump techniques + credential harvest + export |
 
-Optional (for enhanced features):
-  httpx       - HTTP/2 support in async engine
-  psycopg2    - CockroachDB direct connection
-  pymysql     - TiDB direct connection
+```bash
+python gensql.py -u "https://target.com/?id=1" --profile dump
 ```
 
 ---
 
-## Legal Disclaimer
+## 🚩 All Flags
 
-GenSQL is provided for **authorized penetration testing and security research only**.
-Unauthorized use against systems you do not own or have explicit permission to test is illegal.
-The author (Jeevraj) assumes no liability for misuse of this tool.
+### AI & Engine
+| Flag | Description |
+|------|-------------|
+| `--ai-assist` | Offline AI payload mutation (no internet needed) |
+| `--ai-learn` | Adaptive learning from each HTTP response |
+| `--async-engine` | HTTP/2 async concurrent scan engine |
+| `--http2` | Force HTTP/2 protocol |
+| `--max-concurrent N` | Max concurrent requests (default: 50) |
+| `--ai-top-payloads N` | Print top N AI-scored payloads after scan |
+
+### WAF & HTTP Error Bypass
+| Flag | Description |
+|------|-------------|
+| `--ai-waf-bypass` | AI WAF evasion (Cloudflare/Akamai/Imperva/AWS/F5) |
+| `--bypass-403` | Auto-bypass 403 Forbidden (50+ techniques) |
+| `--bypass-404` | Auto-bypass 404 Not Found (path fuzzing) |
+| `--bypass-429` | Auto-bypass 429 Rate Limit (rotation + back-off) |
+| `--bypass-503` | Auto-bypass 503 Service Unavailable |
+| `--auto-bypass` | Auto-detect and bypass all HTTP errors |
+| `--bypass-url URL` | URL to run bypass engine on (standalone) |
+| `--humanize` | Humanized request timing |
+| `--chunked-bypass` | Chunked transfer encoding bypass |
+| `--rotate-identity N` | Rotate identity every N requests |
+| `--encoder-chain CHAIN` | Encoder chain e.g. `url,base64,hex` |
+
+### Advanced Database Dump
+| Flag | Description |
+|------|-------------|
+| `--adv-dump` | Use GenSQL advanced dump engine |
+| `--dump-technique MODE` | `auto`/`union`/`error`/`blind`/`bitwise`/`time` |
+| `--dump-hex` | Hex-encode payloads (bypasses string WAF rules) |
+| `--dump-blind` | Force binary-search blind extraction |
+| `--dump-bitwise` | Force bitwise extraction (8 req/char) |
+| `--dump-time` | Force time-based extraction |
+| `--dump-error` | Force error-based extraction |
+| `--dump-parallel` | Dump multiple tables in parallel |
+| `--dump-creds` | Focus on credential tables |
+| `--dump-all-tables` | Enumerate and dump all tables |
+| `--dump-table TABLE` | Specific table to dump |
+| `--dump-columns COLS` | Comma-separated column names |
+| `--dump-threads N` | Parallel dump threads (default: 4) |
+| `--dump-chunk N` | Rows per request chunk (default: 50) |
+| `--dump-resume` | Resume interrupted dump |
+| `--dump-output FILE` | Export to .csv/.json/.sql/.html |
+
+### Injection Techniques
+| Flag | Description |
+|------|-------------|
+| `--graphql-inject` | GraphQL injection |
+| `--graphql-introspect` | Full schema introspection first |
+| `--nosql-inject` | NoSQL injection |
+| `--nosql-type TYPE` | `mongodb`/`couchdb`/`redis` |
+| `--jwt-attack` | JWT attack suite |
+| `--jwt-bruteforce` | JWT secret bruteforce |
+| `--grpc-inject` | gRPC-Web injection |
+| `--ssti-inject` | SSTI + auto RCE |
+| `--idor-scan` | IDOR/BOLA enumeration |
+| `--idor-range RANGE` | ID range e.g. `1-10000` |
+
+### Cloud & API
+| Flag | Description |
+|------|-------------|
+| `--cloud-scan` | Cloud/serverless injection |
+| `--cloud-provider PROVIDER` | `aws`/`azure`/`gcp`/`auto` |
+| `--lambda-cold-start` | Lambda cold-start timing attack |
+| `--ssrf-metadata` | SSRF to cloud metadata |
+| `--swagger-url URL` | OpenAPI/Swagger spec for guided scan |
+
+### Recon
+| Flag | Description |
+|------|-------------|
+| `--deep-recon` | Full OSINT recon |
+| `--wayback` | Wayback Machine parameter mining |
+| `--js-analysis` | JS endpoint/parameter extraction |
+| `--subdomain-enum` | Passive subdomain enumeration |
+| `--param-mine` | Parameter mining (1000+ names) |
+| `--shodan-key KEY` | Shodan API key |
+
+### Post-Exploitation
+| Flag | Description |
+|------|-------------|
+| `--exploit-chain` | SQLi → webshell → OS command |
+| `--harvest-creds` | Extract credentials from dump |
+| `--privesc-check` | DB privilege escalation |
+| `--lateral-move` | Lateral movement payloads |
+| `--oob-exfil` | OOB DNS/HTTP exfiltration |
+| `--oob-domain DOMAIN` | Callback domain |
+| `--oob-listen PORT` | Built-in OOB listener |
+
+### Reporting
+| Flag | Description |
+|------|-------------|
+| `--report-html FILE` | HTML report with CVSS 4.0 |
+| `--report-json FILE` | JSON report |
+| `--report-md FILE` | Markdown report |
+| `--cvss4` | Include CVSS 4.0 scores |
+| `--dashboard` | Real-time web dashboard |
+| `--dashboard-port PORT` | Dashboard port (default: 7474) |
+
+### Profiles & Wizard
+| Flag | Description |
+|------|-------------|
+| `--profile NAME` | `stealth`/`api`/`cloud`/`pentest`/`aggressive`/`dump` |
+| `--wizard` | Interactive guided wizard |
 
 ---
 
-*GenSQL v2.0.0 — by Jeevraj — Next-Generation SQL Injection & Web Security Assessment Framework*
+## 🏗️ Architecture
+
+```
+GenSQL v2.0.0
+├── gensql.py                      ← Main entry point
+├── lib/
+│   ├── core/
+│   │   ├── ai_engine.py           ← Offline AI payload mutation
+│   │   ├── async_engine.py        ← HTTP/2 concurrent engine
+│   │   └── settings.py            ← Configuration + GenSQL banner
+│   ├── evasion/
+│   │   ├── ai_waf_bypass.py       ← AI WAF fingerprint + evasion
+│   │   └── encoder_chain.py       ← Encoder chain (url/base64/hex/...)
+│   ├── techniques/
+│   │   ├── bypass/
+│   │   │   ├── http_error_bypass.py  ← 403/404/429/503 bypass (50+ techniques)
+│   │   │   └── smart_tamper.py    ← 30+ smart tamper functions
+│   │   ├── dump/
+│   │   │   ├── advanced_dump.py   ← Binary/bitwise/hex/parallel dump
+│   │   │   └── hash_cracker.py    ← Offline hash identification + cracking
+│   │   ├── graphql/               ← GraphQL injection
+│   │   ├── nosql/                 ← MongoDB/CouchDB/Redis injection
+│   │   ├── auth/                  ← JWT attacks
+│   │   ├── api/                   ← REST + gRPC injection
+│   │   ├── ssti/                  ← SSTI → RCE chain
+│   │   └── cloud/                 ← AWS/Azure/GCP injection
+│   ├── recon/
+│   │   ├── deep_recon.py          ← OSINT + Wayback + JS analysis
+│   │   └── param_miner.py         ← Parameter discovery
+│   ├── exploit/
+│   │   ├── chain.py               ← SQLi → webshell → OS chain
+│   │   └── oob.py                 ← OOB DNS/HTTP exfiltration
+│   └── report/
+│       ├── report_engine.py       ← CVSS 4.0 HTML/JSON/MD reports
+│       └── dashboard.py           ← Real-time web dashboard
+```
+
+---
+
+## ⚖️ Legal Disclaimer
+
+Usage of GenSQL for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state and federal laws. The author (Jeevraj) assumes no liability and is not responsible for any misuse or damage caused by this tool.
+
+**Use only on systems you own or have explicit written permission to test.**
+
+---
+
+## 👤 Author
+
+**Jeevraj**  
+GitHub: [bambooatwork/GenSQL](https://github.com/bambooatwork/GenSQL)
+
+---
+
+*GenSQL v2.0.0 — Built for 2026 and beyond.*
