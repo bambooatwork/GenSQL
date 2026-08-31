@@ -1,27 +1,18 @@
 #!/usr/bin/env python
 """
-GenSQL - Next-Generation Web Security Assessment Framework
-Version : 2.0.0
+GenSQL v2.0.0 — Next-Generation Web Security Assessment Framework
 Author  : Jeevraj
 
-Capabilities:
-  - Offline AI payload mutation engine (fully offline, no API keys)
-  - Async HTTP/2 concurrent scan engine (50 concurrent by default)
-  - AI-powered WAF bypass (Cloudflare, Akamai, Imperva, AWS WAF, F5...)
-  - HTTP error bypass: 403/404/429/503 (50+ techniques)
-  - Advanced database dump (binary-search blind, bitwise, hex-encoded, parallel)
-  - GraphQL / NoSQL / JWT / gRPC / SSTI / Cloud injection
-  - 100+ tamper scripts for modern WAFs
-  - Deep OSINT recon (crt.sh, Wayback Machine, JS analysis)
-  - Exploit chain: SQLi to RCE to lateral movement
-  - OOB exfiltration via DNS / HTTP
-  - CVSS 4.0 HTML/JSON/Markdown/SQL reports
-  - Real-time web dashboard
-  - Scan profiles: stealth / pentest / api / cloud / aggressive
+ ██████╗ ███████╗███╗   ██╗███████╗ ██████╗ ██╗
+██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔═══██╗██║
+██║  ███╗█████╗  ██╔██╗ ██║███████╗██║   ██║██║
+██║   ██║██╔══╝  ██║╚██╗██║╚════██║██║▄▄ ██║██║
+╚██████╔╝███████╗██║ ╚████║███████║╚██████╔╝███████╗
+ ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝ ╚══▀▀═╝ ╚══════╝
 """
 from __future__ import print_function
 
-# ── GenSQL-specific flags — stripped from sys.argv before core parser runs ────
+# ── GenSQL-only flags (stripped before core engine sees argv) ─────────────────
 _GENSQL_BOOL_FLAGS = {
     "--ai-assist", "--ai-learn", "--async-engine", "--http2",
     "--graphql-inject", "--graphql-introspect", "--nosql-inject",
@@ -32,13 +23,12 @@ _GENSQL_BOOL_FLAGS = {
     "--param-mine", "--exploit-chain", "--harvest-creds",
     "--privesc-check", "--lateral-move", "--oob-exfil", "--cvss4",
     "--dashboard", "--wizard",
-    # New flags
     "--bypass-403", "--bypass-404", "--bypass-429", "--bypass-503",
-    "--bypass-all", "--auto-bypass",
+    "--auto-bypass",
     "--adv-dump", "--dump-hex", "--dump-blind", "--dump-bitwise",
     "--dump-time", "--dump-error", "--dump-parallel", "--dump-creds",
-    "--dump-all-tables", "--dump-resume",
-    "--force-dump",
+    "--dump-all-tables", "--dump-resume", "--force-dump",
+    "--no-banner",
 }
 _GENSQL_VALUE_FLAGS = {
     "--nosql-type", "--cloud-provider", "--encoder-chain", "--swagger-url",
@@ -46,43 +36,64 @@ _GENSQL_VALUE_FLAGS = {
     "--report-json", "--report-md", "--profile", "--idor-range",
     "--max-concurrent", "--ai-top-payloads", "--oob-listen",
     "--rotate-identity", "--dashboard-port",
-    # New flags
     "--dump-technique", "--dump-table", "--dump-columns",
     "--dump-output", "--dump-threads", "--dump-chunk",
     "--bypass-url", "--bypass-payload",
+    "--target",   # GenSQL alias for -u
+    "--mode",     # bypass mode
 }
 
 
 def _strip_gensql_args(argv):
-    """Remove GenSQL-specific flags from argv so the core parser never sees them."""
+    """Strip GenSQL-specific flags before the core engine sees argv."""
     clean = []
     i = 1
     while i < len(argv):
         a = argv[i]
         if a in _GENSQL_BOOL_FLAGS:
-            i += 1
-            continue
+            i += 1; continue
         if a in _GENSQL_VALUE_FLAGS:
-            i += 2
-            continue
+            i += 2; continue
         key = a.split("=")[0]
         if key in _GENSQL_VALUE_FLAGS:
-            i += 1
+            i += 1; continue
+        # Map GenSQL aliases to core flags
+        if a == "--target":
+            i += 1  # skip the flag, next arg is handled below
             continue
         clean.append(a)
         i += 1
     return [argv[0]] + clean
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 try:
-    import sys, os
+    import sys, os, bdb, glob, inspect, json, logging, re
+    import shutil, threading, time, traceback, warnings, argparse
+
     sys.dont_write_bytecode = True
+
+    # Install GenSQL UI first — before ANY logging happens
+    try:
+        from lib.core.gensql_ui import install as _install_ui, C, info, warn, error, fatal, banner_line, success
+        _install_ui()
+        _UI_READY = True
+    except Exception as _ui_err:
+        _UI_READY = False
+        C = type("C", (), {"RESET": "", "BOLD": "", "CYAN": "", "GREEN": "",
+                            "YELLOW": "", "RED": "", "GRAY": "", "WHITE": ""})()
+        def info(m): print("[ ~ ] " + m)
+        def warn(m): print("[ ! ] " + m)
+        def error(m): print("[ERR] " + m)
+        def fatal(m): print("[!!!] " + m)
+        def success(m): print("[ + ] " + m)
+        def banner_line(t=""): print("  ── " + t)
+
     try:
         __import__("lib.utils.versioncheck")
     except ImportError:
-        sys.exit("[!] Run GenSQL from its own directory: cd GenSQL && python gensql.py")
-
-    import bdb, glob, inspect, json, logging, re, shutil, threading, time, traceback, warnings
+        fatal("Run GenSQL from its root directory  →  cd GenSQL && python gensql.py")
+        sys.exit(1)
 
     try: ResourceWarning
     except NameError: ResourceWarning = Warning
@@ -92,11 +103,13 @@ try:
     warnings.filterwarnings(action="ignore", message="Python 2 is no longer supported")
     warnings.filterwarnings(action="ignore", message=".*was already imported", category=UserWarning)
     warnings.filterwarnings(action="ignore", category=UserWarning, module="psycopg2")
+    warnings.filterwarnings(action="ignore", category=ResourceWarning)
 
     from lib.core.data import logger
     from lib.core.common import (checkPipedInput, codeIsModified, createGithubIssue,
-        dataToStdout, filterNone, getDaysFromLastUpdate, getFileItems, getSafeExString,
-        maskSensitiveData, openFile, setPaths, weAreFrozen, setColor, unhandledExceptionMessage)
+        dataToStdout, filterNone, getDaysFromLastUpdate, getFileItems,
+        getSafeExString, maskSensitiveData, openFile, setPaths,
+        weAreFrozen, setColor, unhandledExceptionMessage)
     from lib.core.convert import getUnicode
     from lib.core.compat import LooseVersion, xrange
     from lib.core.data import cmdLineOptions, conf, kb
@@ -106,18 +119,17 @@ try:
         SqlmapSilentQuitException, SqlmapUserQuitException)
     from lib.core.option import init, initOptions
     from lib.core.patch import dirtyPatches, resolveCrossReferences
-    from lib.core.settings import (GIT_PAGE, LAST_UPDATE_NAGGING_DAYS, LEGAL_DISCLAIMER,
-        THREAD_FINALIZATION_TIMEOUT, UNICODE_ENCODING, VERSION,
-        JEEVSQL_BANNER, JEEVSQL_VERSION)
+    from lib.core.settings import (GIT_PAGE, LAST_UPDATE_NAGGING_DAYS,
+        LEGAL_DISCLAIMER, THREAD_FINALIZATION_TIMEOUT,
+        UNICODE_ENCODING, VERSION, JEEVSQL_BANNER, JEEVSQL_VERSION)
     from lib.parse.cmdline import cmdLineParser
     from lib.utils.crawler import crawl
 
 except KeyboardInterrupt:
-    import time as _t
-    sys.exit("\r[%s] [CRITICAL] user aborted" % _t.strftime("%X"))
+    print("\n  Aborted."); sys.exit(0)
 
 
-# ── Safe module loader ────────────────────────────────────────────────────────
+# ── Safe module importer ──────────────────────────────────────────────────────
 def _safe_import(mod, attr=None):
     try:
         m = __import__(mod, fromlist=[attr] if attr else [])
@@ -125,41 +137,43 @@ def _safe_import(mod, attr=None):
     except Exception:
         return None
 
-AIPayloadEngine  = _safe_import("lib.core.ai_engine",                     "AIPayloadEngine")
-AsyncScanEngine  = _safe_import("lib.core.async_engine",                  "AsyncScanEngine")
-AIWAFBypass      = _safe_import("lib.evasion.ai_waf_bypass",              "AIWAFBypass")
-EncoderChain     = _safe_import("lib.evasion.encoder_chain",              "EncoderChain")
-GraphQLInj       = _safe_import("lib.techniques.graphql.advanced_inject", "GraphQLInjector")
-NoSQLInj         = _safe_import("lib.techniques.nosql.mongodb_inject",    "NoSQLInjector")
-JWTAttacker      = _safe_import("lib.techniques.auth.jwt_advanced",       "JWTAttacker")
-RESTInj          = _safe_import("lib.techniques.api.rest_inject",         "RESTAPIInjector")
-GRPCInj          = _safe_import("lib.techniques.api.grpc_inject",        "GRPCInjector")
-CloudInj         = _safe_import("lib.techniques.cloud.lambda_inject",     "CloudInjector")
-AdvSSTI          = _safe_import("lib.techniques.ssti.advanced_ssti",      "AdvancedSSTI")
-DeepRecon        = _safe_import("lib.recon.deep_recon",                   "DeepRecon")
-ParamMiner       = _safe_import("lib.recon.param_miner",                  "ParamMiner")
-ExploitChain     = _safe_import("lib.exploit.chain",                      "ExploitChain")
-OOBExfil         = _safe_import("lib.exploit.oob",                        "OOBExfiltrator")
-ReportEngine     = _safe_import("lib.report.report_engine",               "ReportEngine")
-# New powerful modules
-HTTPBypass       = _safe_import("lib.techniques.bypass.http_error_bypass", "HTTPErrorBypass")
-AdvDumpEngine    = _safe_import("lib.techniques.dump.advanced_dump",       "AdvancedDumpEngine")
+AIPayloadEngine = _safe_import("lib.core.ai_engine",                     "AIPayloadEngine")
+AsyncScanEngine = _safe_import("lib.core.async_engine",                  "AsyncScanEngine")
+AIWAFBypass     = _safe_import("lib.evasion.ai_waf_bypass",              "AIWAFBypass")
+EncoderChain    = _safe_import("lib.evasion.encoder_chain",              "EncoderChain")
+GraphQLInj      = _safe_import("lib.techniques.graphql.advanced_inject", "GraphQLInjector")
+NoSQLInj        = _safe_import("lib.techniques.nosql.mongodb_inject",    "NoSQLInjector")
+JWTAttacker     = _safe_import("lib.techniques.auth.jwt_advanced",       "JWTAttacker")
+RESTInj         = _safe_import("lib.techniques.api.rest_inject",         "RESTAPIInjector")
+GRPCInj         = _safe_import("lib.techniques.api.grpc_inject",         "GRPCInjector")
+CloudInj        = _safe_import("lib.techniques.cloud.lambda_inject",     "CloudInjector")
+AdvSSTI         = _safe_import("lib.techniques.ssti.advanced_ssti",      "AdvancedSSTI")
+DeepRecon       = _safe_import("lib.recon.deep_recon",                   "DeepRecon")
+ParamMiner      = _safe_import("lib.recon.param_miner",                  "ParamMiner")
+ExploitChain    = _safe_import("lib.exploit.chain",                      "ExploitChain")
+OOBExfil        = _safe_import("lib.exploit.oob",                        "OOBExfiltrator")
+ReportEngine    = _safe_import("lib.report.report_engine",               "ReportEngine")
+HTTPBypass      = _safe_import("lib.techniques.bypass.http_error_bypass","HTTPErrorBypass")
+AdvDumpEngine   = _safe_import("lib.techniques.dump.advanced_dump",      "AdvancedDumpEngine")
+SmartTamper     = _safe_import("lib.techniques.bypass.smart_tamper",     "SmartTamper")
+HashIdentifier  = _safe_import("lib.techniques.dump.hash_cracker",       "HashIdentifier")
 
-_MODS = {
-    "ai_engine":    AIPayloadEngine,  "async_engine":  AsyncScanEngine,
-    "ai_waf_bypass":AIWAFBypass,      "encoder_chain": EncoderChain,
-    "graphql_inject":GraphQLInj,      "nosql_inject":  NoSQLInj,
-    "jwt_attack":   JWTAttacker,      "rest_inject":   RESTInj,
-    "grpc_inject":  GRPCInj,          "cloud_scan":    CloudInj,
-    "ssti_advanced":AdvSSTI,          "deep_recon":    DeepRecon,
-    "param_miner":  ParamMiner,       "exploit_chain": ExploitChain,
-    "oob_exfil":    OOBExfil,         "reporting":     ReportEngine,
-    "http_bypass":  HTTPBypass,       "adv_dump":      AdvDumpEngine,
+_MODULES = {
+    "ai_engine":    AIPayloadEngine,  "async_engine":   AsyncScanEngine,
+    "ai_waf_bypass":AIWAFBypass,      "encoder_chain":  EncoderChain,
+    "graphql":      GraphQLInj,       "nosql":          NoSQLInj,
+    "jwt":          JWTAttacker,      "rest_api":       RESTInj,
+    "grpc":         GRPCInj,          "cloud":          CloudInj,
+    "ssti":         AdvSSTI,          "recon":          DeepRecon,
+    "param_mine":   ParamMiner,       "exploit_chain":  ExploitChain,
+    "oob_exfil":    OOBExfil,         "reporting":      ReportEngine,
+    "http_bypass":  HTTPBypass,       "adv_dump":       AdvDumpEngine,
+    "smart_tamper": SmartTamper,      "hash_id":        HashIdentifier,
 }
-FEATURES = {k: v is not None for k, v in _MODS.items()}
+FEATURES = {k: v is not None for k, v in _MODULES.items()}
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Path helper ───────────────────────────────────────────────────────────────
 def modulePath():
     try: _ = sys.executable if weAreFrozen() else __file__
     except NameError: _ = inspect.getsourcefile(modulePath)
@@ -169,438 +183,782 @@ def modulePath():
 def checkEnvironment():
     try: os.path.isdir(modulePath())
     except UnicodeEncodeError:
-        logger.critical("non-ASCII path — move GenSQL to a plain-ASCII directory")
+        fatal("Non-ASCII path detected — move GenSQL to a plain ASCII directory")
         raise SystemExit
-    if LooseVersion(VERSION) < LooseVersion("1.0"):
-        logger.critical("broken runtime environment"); raise SystemExit
 
-def printBanner():
+
+# ── Banner ────────────────────────────────────────────────────────────────────
+def printBanner(no_banner=False):
+    if no_banner:
+        return
     raw = JEEVSQL_BANNER
     raw = re.sub(r"(?im).*built on sqlmap.*\n?", "", raw)
     dataToStdout(raw, forceOutput=True)
+
     loaded  = [k for k, v in FEATURES.items() if v]
-    dataToStdout("\033[01;32m  [+] Loaded  : %s\033[0m\n" % ", ".join(loaded), forceOutput=True)
+    missing = [k for k, v in FEATURES.items() if not v]
+
+    dataToStdout(
+        C.GREEN + "  [+] " + C.GRAY + "Loaded  : " + C.GREEN
+        + ", ".join(loaded) + C.RESET + "\n", forceOutput=True)
+    if missing:
+        dataToStdout(
+            C.YELLOW + "  [-] " + C.GRAY + "Optional: " + C.YELLOW
+            + ", ".join(missing) + C.RESET + "\n", forceOutput=True)
     dataToStdout("\n", forceOutput=True)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SUBCOMMAND: scan
+# ─────────────────────────────────────────────────────────────────────────────
+SCAN_HELP = """
+  EXAMPLES
+  ─────────────────────────────────────────────────────────
+  Basic scan:
+    gensql scan -t https://site.com/page?id=1
+
+  Detect injection with WAF evasion:
+    gensql scan -t https://site.com/page?id=1 --evade --level 3
+
+  POST parameter scan:
+    gensql scan -t https://site.com/login -f "user=admin&pass=x"
+
+  Scan with tamper chain:
+    gensql scan -t https://site.com/page?id=1 --tamper hex,space
+
+  Scan all parameters:
+    gensql scan -t https://site.com/page?id=1&cat=2 --all-params
+"""
+
+DUMP_HELP = """
+  EXAMPLES
+  ─────────────────────────────────────────────────────────
+  Auto dump everything:
+    gensql dump -t https://site.com/page?id=1
+
+  Dump specific table:
+    gensql dump -t https://site.com/page?id=1 --table users
+
+  Dump with hex encoding (bypass string WAF):
+    gensql dump -t https://site.com/page?id=1 --hex
+
+  Dump credentials only:
+    gensql dump -t https://site.com/page?id=1 --creds
+
+  Parallel dump (fastest):
+    gensql dump -t https://site.com/page?id=1 --parallel --threads 8
+
+  Export to HTML:
+    gensql dump -t https://site.com/page?id=1 --out dump.html
+"""
+
+BYPASS_HELP = """
+  EXAMPLES
+  ─────────────────────────────────────────────────────────
+  Test all bypass techniques on a 403:
+    gensql bypass -t https://site.com/admin
+
+  Bypass a 429 rate limit:
+    gensql bypass -t https://site.com/api --code 429
+
+  Run bypass then scan:
+    gensql bypass -t https://site.com/admin --then-scan
+"""
+
+RECON_HELP = """
+  EXAMPLES
+  ─────────────────────────────────────────────────────────
+  Full OSINT recon:
+    gensql recon -t https://site.com
+
+  Mine parameters from Wayback Machine:
+    gensql recon -t https://site.com --wayback
+
+  Enumerate subdomains + endpoints:
+    gensql recon -t https://site.com --subdomains --js
+"""
+
+
 # ── Argument parser ───────────────────────────────────────────────────────────
-def _args(argv=None):
-    import argparse
+def _build_parser():
+    """Build the GenSQL argument parser — completely different from sqlmap."""
+
     p = argparse.ArgumentParser(
         prog="gensql",
-        description="GenSQL v2.0.0 — Next-Generation Web Security Assessment Framework\n"
-                    "                by Jeevraj\n\n"
-                    "  Faster, deeper, smarter — the ultimate SQL injection & security scanner.\n"
-                    "  Use --wizard for guided mode  |  Use --profile for instant presets.",
+        description=(
+            C.CYAN + C.BOLD + "GenSQL v2.0.0" + C.RESET
+            + " — Next-Generation Web Security Assessment Framework\n"
+            + "  by Jeevraj\n\n"
+            + "  Use a subcommand or pass flags directly:\n"
+            + C.YELLOW + "    gensql scan    " + C.GRAY + "— inject & enumerate\n" + C.RESET
+            + C.YELLOW + "    gensql dump    " + C.GRAY + "— extract database data\n" + C.RESET
+            + C.YELLOW + "    gensql bypass  " + C.GRAY + "— bypass 403/404/429/503\n" + C.RESET
+            + C.YELLOW + "    gensql recon   " + C.GRAY + "— OSINT & discovery\n" + C.RESET
+            + C.YELLOW + "    gensql wizard  " + C.GRAY + "— interactive guided mode\n" + C.RESET
+        ),
         add_help=False,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # ── AI & Engine ──────────────────────────────────────────────────
-    g1 = p.add_argument_group("AI & Engine")
-    g1.add_argument("--ai-assist",       action="store_true", help="Offline AI payload mutation (no internet needed)")
-    g1.add_argument("--ai-learn",        action="store_true", help="Adaptive learning from each response")
-    g1.add_argument("--async-engine",    action="store_true", help="HTTP/2 async concurrent scan engine")
-    g1.add_argument("--http2",           action="store_true", help="Force HTTP/2 protocol")
-    g1.add_argument("--max-concurrent",  type=int, default=50, metavar="N", help="Max concurrent requests (default: 50)")
-    g1.add_argument("--ai-top-payloads", type=int, default=0,  metavar="N", help="Print top N AI-scored payloads after scan")
+    # ── Target ───────────────────────────────────────────────────────────────
+    g_tgt = p.add_argument_group(C.BOLD + "TARGET" + C.RESET)
+    g_tgt.add_argument("-t", "--target", dest="target", metavar="URL",
+        help="Target URL  (e.g. https://site.com/page?id=1)")
+    g_tgt.add_argument("-u",             dest="target",  # keep -u as alias
+        help=argparse.SUPPRESS)
+    g_tgt.add_argument("-f", "--form-data", dest="form_data", metavar="DATA",
+        help="POST form data  (e.g. 'user=x&pass=y')")
+    g_tgt.add_argument("-H", "--header", dest="extra_headers", action="append",
+        metavar="HEADER", help="Extra HTTP header  (can repeat)")
+    g_tgt.add_argument("--cookie",       dest="cookie", metavar="COOKIE",
+        help="Cookie string")
+    g_tgt.add_argument("--proxy",        dest="proxy",  metavar="PROXY",
+        help="HTTP/SOCKS proxy  (e.g. http://127.0.0.1:8080)")
 
-    # ── WAF & Error Bypass ───────────────────────────────────────────
-    g2 = p.add_argument_group("WAF & HTTP Error Bypass")
-    g2.add_argument("--ai-waf-bypass",  action="store_true", help="AI-powered WAF evasion (Cloudflare/Akamai/Imperva/AWS)")
-    g2.add_argument("--bypass-403",     action="store_true", help="Auto-bypass 403 Forbidden (50+ techniques)")
-    g2.add_argument("--bypass-404",     action="store_true", help="Auto-bypass 404 Not Found (path fuzzing/header tricks)")
-    g2.add_argument("--bypass-429",     action="store_true", help="Auto-bypass 429 Rate Limit (rotation + back-off)")
-    g2.add_argument("--bypass-503",     action="store_true", help="Auto-bypass 503 Service Unavailable")
-    g2.add_argument("--auto-bypass",    action="store_true", help="Auto-detect and bypass all HTTP errors")
-    g2.add_argument("--bypass-url",     default=None, metavar="URL", help="URL to run the bypass engine against")
-    g2.add_argument("--bypass-payload", default=None, metavar="DATA", help="POST payload to use during bypass tests")
-    g2.add_argument("--humanize",       action="store_true", help="Humanise request timing and behaviour")
-    g2.add_argument("--chunked-bypass", action="store_true", help="Chunked transfer encoding bypass")
-    g2.add_argument("--rotate-identity",type=int, default=0,  metavar="N", help="Rotate identity every N requests")
-    g2.add_argument("--encoder-chain",  default=None, metavar="CHAIN", help="Encoder chain e.g. url,base64,hex")
+    # ── Scan behaviour ────────────────────────────────────────────────────────
+    g_scan = p.add_argument_group(C.BOLD + "SCAN BEHAVIOUR" + C.RESET)
+    g_scan.add_argument("--level",     type=int, default=1, choices=range(1, 6),
+        metavar="1-5",  help="Test depth  1=basic  5=exhaustive  (default: 1)")
+    g_scan.add_argument("--risk",      type=int, default=1, choices=range(1, 4),
+        metavar="1-3",  help="Risk level  1=safe  3=heavy  (default: 1)")
+    g_scan.add_argument("--speed",     choices=["slow", "normal", "fast", "turbo"],
+        default="normal", help="Request speed preset  (default: normal)")
+    g_scan.add_argument("--all-params",  action="store_true",
+        help="Test every parameter in the URL")
+    g_scan.add_argument("-p", "--param", dest="param", metavar="PARAM",
+        help="Force-test this parameter")
+    g_scan.add_argument("--dbms",      dest="dbms",   metavar="DBMS",
+        help="Force DBMS  (mysql/pgsql/mssql/oracle/sqlite)")
+    g_scan.add_argument("--technique", dest="technique", metavar="BEUQT",
+        help="Injection techniques  (B=blind E=error U=union Q=stacked T=time)")
+    g_scan.add_argument("--tamper",    dest="tamper", metavar="LIST",
+        help="Tamper scripts  e.g. hex,space,rand  (or 'auto' for AI selection)")
 
-    # ── Advanced Database Dump ───────────────────────────────────────
-    g3 = p.add_argument_group("Advanced Database Dump")
-    g3.add_argument("--adv-dump",        action="store_true", help="Use GenSQL advanced dump engine (faster + smarter)")
-    g3.add_argument("--dump-technique",  default="auto",      metavar="MODE",
-                    help="Extraction method: auto | union | error | blind | bitwise | time (default: auto)")
-    g3.add_argument("--dump-hex",        action="store_true", help="Hex-encode dump payloads (bypasses string filters)")
-    g3.add_argument("--dump-blind",      action="store_true", help="Force binary-search blind extraction")
-    g3.add_argument("--dump-bitwise",    action="store_true", help="Force bitwise blind extraction (fastest for blind)")
-    g3.add_argument("--dump-time",       action="store_true", help="Force time-based extraction (slowest, most reliable)")
-    g3.add_argument("--dump-error",      action="store_true", help="Force error-based extraction")
-    g3.add_argument("--dump-parallel",   action="store_true", help="Dump multiple tables in parallel")
-    g3.add_argument("--dump-creds",      action="store_true", help="Focus dump on credential tables (users/passwords/hashes)")
-    g3.add_argument("--dump-all-tables", action="store_true", help="Auto-enumerate and dump all tables")
-    g3.add_argument("--dump-table",      default=None, metavar="TABLE", help="Specific table to dump")
-    g3.add_argument("--dump-columns",    default=None, metavar="COLS",  help="Comma-separated column names to dump")
-    g3.add_argument("--dump-threads",    type=int, default=4, metavar="N", help="Parallel dump threads (default: 4)")
-    g3.add_argument("--dump-chunk",      type=int, default=50, metavar="N", help="Rows per request chunk (default: 50)")
-    g3.add_argument("--dump-resume",     action="store_true", help="Resume interrupted dump from checkpoint")
-    g3.add_argument("--dump-output",     default=None, metavar="FILE",
-                    help="Export dump to file (.csv/.json/.sql/.html auto-detected)")
+    # ── WAF & Bypass ─────────────────────────────────────────────────────────
+    g_waf = p.add_argument_group(C.BOLD + "WAF & BYPASS" + C.RESET)
+    g_waf.add_argument("--evade",         action="store_true",
+        help="Full WAF evasion mode  (auto-selects best tampers)")
+    g_waf.add_argument("--auto-bypass",   action="store_true",
+        help="Auto-bypass HTTP 403/404/429/503 before scanning")
+    g_waf.add_argument("--bypass-code",   type=int, metavar="CODE",
+        help="Specific HTTP error code to bypass")
+    g_waf.add_argument("--ai-evade",      action="store_true",
+        help="AI-powered evasion  (offline, no API)")
+    g_waf.add_argument("--rotate-id",     type=int, default=0, metavar="N",
+        help="Rotate identity every N requests")
+    g_waf.add_argument("--encode",        dest="encoder_chain", metavar="CHAIN",
+        help="Encoder chain  e.g. url,base64,hex")
 
-    # ── Injection Techniques ─────────────────────────────────────────
-    g4 = p.add_argument_group("Injection Techniques")
-    g4.add_argument("--graphql-inject",     action="store_true", help="GraphQL injection (batch/alias/fragment/introspect)")
-    g4.add_argument("--graphql-introspect", action="store_true", help="Full GraphQL introspection scan first")
-    g4.add_argument("--nosql-inject",       action="store_true", help="NoSQL injection (MongoDB/CouchDB/Redis)")
-    g4.add_argument("--nosql-type",         default="mongodb",   metavar="TYPE")
-    g4.add_argument("--jwt-attack",         action="store_true", help="JWT attacks (alg:none / RS256-HS256 / kid-SQLi)")
-    g4.add_argument("--jwt-bruteforce",     action="store_true", help="Bruteforce JWT weak secrets")
-    g4.add_argument("--grpc-inject",        action="store_true", help="gRPC-Web proto field injection")
-    g4.add_argument("--ssti-inject",        action="store_true", help="SSTI detection + auto RCE chain")
-    g4.add_argument("--idor-scan",          action="store_true", help="IDOR/BOLA parameter enumeration")
-    g4.add_argument("--idor-range",         default="1-1000",    metavar="RANGE")
+    # ── Dump ─────────────────────────────────────────────────────────────────
+    g_dump = p.add_argument_group(C.BOLD + "DUMP" + C.RESET)
+    g_dump.add_argument("--dump",        action="store_true",
+        help="Dump the entire database (auto technique)")
+    g_dump.add_argument("--creds",       action="store_true",
+        help="Dump credential tables  (users/passwords/hashes)")
+    g_dump.add_argument("--table",       metavar="TABLE",
+        help="Dump a specific table")
+    g_dump.add_argument("--columns",     metavar="COLS",
+        help="Comma-separated columns to dump")
+    g_dump.add_argument("--hex",         action="store_true",
+        help="Hex-encode dump  (bypass string WAF filters)")
+    g_dump.add_argument("--blind",       action="store_true",
+        help="Binary-search blind extraction  (50%% fewer requests)")
+    g_dump.add_argument("--bitwise",     action="store_true",
+        help="Bitwise extraction  (8 requests/char, fastest blind)")
+    g_dump.add_argument("--parallel",    action="store_true",
+        help="Dump multiple tables in parallel")
+    g_dump.add_argument("--threads",     type=int, default=4, metavar="N",
+        help="Parallel dump threads  (default: 4)")
+    g_dump.add_argument("--chunk",       type=int, default=50, metavar="N",
+        help="Rows per chunk  (default: 50)")
+    g_dump.add_argument("--resume",      action="store_true",
+        help="Resume an interrupted dump")
+    g_dump.add_argument("--out",         metavar="FILE",
+        help="Export to file  (.html/.json/.csv/.sql auto-detected)")
+    g_dump.add_argument("--force-dump",  action="store_true",
+        help="Dump without waiting for injection confirmation")
 
-    # ── Cloud & API ──────────────────────────────────────────────────
-    g5 = p.add_argument_group("Cloud & API")
-    g5.add_argument("--cloud-scan",        action="store_true", help="Cloud/serverless injection (AWS Lambda/Azure/GCP)")
-    g5.add_argument("--cloud-provider",    default="auto",      metavar="PROVIDER")
-    g5.add_argument("--lambda-cold-start", action="store_true", help="Lambda cold-start timing attack")
-    g5.add_argument("--ssrf-metadata",     action="store_true", help="SSRF to cloud metadata (169.254.169.254)")
-    g5.add_argument("--swagger-url",       default=None,        metavar="URL")
+    # ── Modern injection surfaces ──────────────────────────────────────────────
+    g_mod = p.add_argument_group(C.BOLD + "MODERN SURFACES" + C.RESET)
+    g_mod.add_argument("--graphql",    action="store_true",
+        help="GraphQL injection  (batch/alias/introspect/fragment)")
+    g_mod.add_argument("--nosql",      action="store_true",
+        help="NoSQL injection  (MongoDB/CouchDB/Redis)")
+    g_mod.add_argument("--nosql-type", default="mongodb", metavar="TYPE")
+    g_mod.add_argument("--jwt",        action="store_true",
+        help="JWT attacks  (alg:none/RS256-HS256/kid-SQLi/bruteforce)")
+    g_mod.add_argument("--grpc",       action="store_true",
+        help="gRPC-Web proto field injection")
+    g_mod.add_argument("--ssti",       action="store_true",
+        help="SSTI detection + auto RCE chain")
+    g_mod.add_argument("--idor",       action="store_true",
+        help="IDOR/BOLA enumeration")
+    g_mod.add_argument("--idor-range", default="1-1000", metavar="RANGE")
+    g_mod.add_argument("--api",        dest="swagger_url", metavar="SPEC",
+        help="Swagger/OpenAPI spec URL for guided API scan")
 
-    # ── Recon ────────────────────────────────────────────────────────
-    g6 = p.add_argument_group("Recon")
-    g6.add_argument("--deep-recon",     action="store_true", help="OSINT recon (crt.sh / Wayback / JS endpoints)")
-    g6.add_argument("--wayback",        action="store_true", help="Mine params from Wayback Machine")
-    g6.add_argument("--js-analysis",    action="store_true", help="Extract endpoints/params from JavaScript")
-    g6.add_argument("--subdomain-enum", action="store_true", help="Passive subdomain enumeration via crt.sh")
-    g6.add_argument("--param-mine",     action="store_true", help="Parameter mining (1000+ built-in names)")
-    g6.add_argument("--shodan-key",     default=None,        metavar="KEY")
+    # ── Cloud ─────────────────────────────────────────────────────────────────
+    g_cloud = p.add_argument_group(C.BOLD + "CLOUD" + C.RESET)
+    g_cloud.add_argument("--cloud",    action="store_true",
+        help="Cloud/serverless injection  (AWS/Azure/GCP)")
+    g_cloud.add_argument("--provider", default="auto", metavar="PROVIDER")
+    g_cloud.add_argument("--ssrf-meta",action="store_true",
+        help="SSRF → cloud metadata  (169.254.169.254)")
 
-    # ── Post-Exploitation ────────────────────────────────────────────
-    g7 = p.add_argument_group("Post-Exploitation")
-    g7.add_argument("--exploit-chain", action="store_true", help="SQLi -> file read -> webshell -> OS cmd chain")
-    g7.add_argument("--harvest-creds", action="store_true", help="Extract credentials from DB dump")
-    g7.add_argument("--privesc-check", action="store_true", help="Check DB privilege escalation paths")
-    g7.add_argument("--lateral-move",  action="store_true", help="Generate lateral movement payloads")
-    g7.add_argument("--oob-exfil",     action="store_true", help="Out-of-band DNS/HTTP exfiltration")
-    g7.add_argument("--oob-domain",    default=None, metavar="DOMAIN")
-    g7.add_argument("--oob-http",      default=None, metavar="URL")
-    g7.add_argument("--oob-listen",    type=int, default=0, metavar="PORT")
+    # ── Recon ─────────────────────────────────────────────────────────────────
+    g_recon = p.add_argument_group(C.BOLD + "RECON" + C.RESET)
+    g_recon.add_argument("--recon",      action="store_true",
+        help="Deep OSINT recon  (crt.sh / Wayback / JS analysis)")
+    g_recon.add_argument("--wayback",    action="store_true",
+        help="Mine params from Wayback Machine")
+    g_recon.add_argument("--js",         action="store_true",
+        help="Extract endpoints from JavaScript files")
+    g_recon.add_argument("--subdomains", action="store_true",
+        help="Enumerate subdomains via certificate transparency")
+    g_recon.add_argument("--mine",       action="store_true",
+        help="Parameter mining  (1000+ built-in names)")
+    g_recon.add_argument("--shodan",     metavar="KEY",
+        help="Shodan API key for extended recon")
 
-    # ── Reporting ────────────────────────────────────────────────────
-    g8 = p.add_argument_group("Reporting")
-    g8.add_argument("--report-html", default=None, metavar="FILE", help="HTML report with CVSS 4.0")
-    g8.add_argument("--report-json", default=None, metavar="FILE", help="JSON report")
-    g8.add_argument("--report-md",   default=None, metavar="FILE", help="Markdown report")
-    g8.add_argument("--cvss4",       action="store_true",          help="Include CVSS 4.0 scores")
-    g8.add_argument("--dashboard",   action="store_true",          help="Start real-time web dashboard")
-    g8.add_argument("--dashboard-port", type=int, default=7474,    metavar="PORT")
+    # ── Post-Exploit ──────────────────────────────────────────────────────────
+    g_post = p.add_argument_group(C.BOLD + "POST-EXPLOITATION" + C.RESET)
+    g_post.add_argument("--exploit",   action="store_true",
+        help="SQLi → file read → webshell → OS command chain")
+    g_post.add_argument("--harvest",   action="store_true",
+        help="Extract and identify credential hashes")
+    g_post.add_argument("--privesc",   action="store_true",
+        help="Check DB privilege escalation paths")
+    g_post.add_argument("--oob",       action="store_true",
+        help="Out-of-band DNS/HTTP data exfiltration")
+    g_post.add_argument("--oob-host",  metavar="DOMAIN")
+    g_post.add_argument("--oob-port",  type=int, default=0, metavar="PORT")
 
-    # ── Profiles & Wizard ────────────────────────────────────────────
-    g9 = p.add_argument_group("Profiles & Wizard")
-    g9.add_argument("--profile", default=None, metavar="PROFILE",
-                    help="Preset: stealth | api | cloud | pentest | aggressive | dump")
-    g9.add_argument("--wizard",  action="store_true",
-                    help="Interactive guided wizard — easiest way to start")
+    # ── Reports ───────────────────────────────────────────────────────────────
+    g_rep = p.add_argument_group(C.BOLD + "REPORTS" + C.RESET)
+    g_rep.add_argument("--report",  metavar="FILE",
+        help="Save HTML report  (dark theme, CVSS 4.0)")
+    g_rep.add_argument("--report-json", metavar="FILE",
+        help="Save JSON report")
+    g_rep.add_argument("--cvss",    action="store_true",
+        help="Include CVSS 4.0 scores")
+    g_rep.add_argument("--live",    action="store_true",
+        help="Real-time web dashboard  (http://localhost:7474)")
+    g_rep.add_argument("--live-port", type=int, default=7474, metavar="PORT")
 
+    # ── Profiles ──────────────────────────────────────────────────────────────
+    g_prof = p.add_argument_group(C.BOLD + "PROFILES & MODE" + C.RESET)
+    g_prof.add_argument("--profile", metavar="PROFILE",
+        help="Preset: stealth|api|cloud|pentest|aggressive|dump")
+    g_prof.add_argument("--wizard",  action="store_true",
+        help="Interactive guided wizard")
+    g_prof.add_argument("--batch",   action="store_true",
+        help="Non-interactive  (auto-answer all prompts)")
+    g_prof.add_argument("--verbose", "-v", action="store_true",
+        help="Verbose output")
+    g_prof.add_argument("--no-banner", action="store_true",
+        help="Skip the ASCII banner")
+    g_prof.add_argument("--version",   action="store_true",
+        help="Show version and exit")
+    g_prof.add_argument("-h", "--help", action="help",
+        help="Show this help and exit")
+
+    return p
+
+
+def _parse_args(argv=None):
+    """Parse GenSQL arguments."""
+    p = _build_parser()
     a, _ = p.parse_known_args(argv)
     return a, p
 
 
-# ── Scan profiles ─────────────────────────────────────────────────────────────
-def _profile(name, o):
+# ── Profile presets ───────────────────────────────────────────────────────────
+def _apply_profile(name, o):
     profiles = {
-        "stealth": {
-            "humanize": True, "rotate_identity": 5, "ai_waf_bypass": True,
-        },
-        "api": {
-            "graphql_inject": True, "nosql_inject": True, "jwt_attack": True,
-            "grpc_inject": True, "idor_scan": True, "param_mine": True, "ai_assist": True,
-        },
-        "cloud": {
-            "cloud_scan": True, "ssrf_metadata": True, "lambda_cold_start": True,
-            "ai_assist": True, "deep_recon": True,
-        },
-        "pentest": {
-            "ai_assist": True, "ai_waf_bypass": True, "deep_recon": True,
-            "graphql_inject": True, "nosql_inject": True, "jwt_attack": True,
-            "ssti_inject": True, "exploit_chain": True, "harvest_creds": True,
-            "privesc_check": True, "cvss4": True, "auto_bypass": True,
-            "adv_dump": True, "dump_technique": "auto",
-            "report_html": "gensql_report.html", "report_json": "gensql_report.json",
-        },
-        "aggressive": {
-            "ai_assist": True, "async_engine": True, "ai_waf_bypass": True,
-            "graphql_inject": True, "nosql_inject": True, "jwt_attack": True,
-            "ssti_inject": True, "exploit_chain": True, "harvest_creds": True,
-            "oob_exfil": True, "auto_bypass": True,
-            "adv_dump": True, "dump_technique": "union",
-            "dump_parallel": True, "dump_hex": True,
-        },
-        # New: dedicated dump profile
-        "dump": {
-            "adv_dump": True, "dump_technique": "auto",
-            "dump_creds": True, "dump_all_tables": True,
-            "dump_parallel": True, "dump_hex": True, "ai_assist": True,
-            "auto_bypass": True, "ai_waf_bypass": True,
-            "dump_output": "gensql_dump.html",
-        },
+        "stealth": dict(evade=True, rotate_id=5, ai_evade=True,
+                        speed="slow", level=2, risk=1),
+        "api":     dict(graphql=True, nosql=True, jwt=True, grpc=True,
+                        idor=True, mine=True, ai_evade=True),
+        "cloud":   dict(cloud=True, ssrf_meta=True, recon=True, ai_evade=True),
+        "pentest": dict(ai_evade=True, evade=True, recon=True, graphql=True,
+                        nosql=True, jwt=True, ssti=True, exploit=True,
+                        harvest=True, privesc=True, cvss=True,
+                        auto_bypass=True, dump=True,
+                        report="gensql_report.html", report_json="gensql_report.json",
+                        level=4, risk=2),
+        "aggressive": dict(ai_evade=True, evade=True, graphql=True, nosql=True,
+                           jwt=True, ssti=True, exploit=True, harvest=True,
+                           oob=True, auto_bypass=True, dump=True,
+                           hex=True, parallel=True, level=5, risk=3,
+                           speed="turbo"),
+        "dump":    dict(dump=True, creds=True, hex=True, parallel=True,
+                        auto_bypass=True, ai_evade=True,
+                        out="gensql_dump.html"),
     }
     p = profiles.get(name.lower(), {})
     if not p:
-        logger.warning("Unknown profile %r — valid: stealth|api|cloud|pentest|aggressive|dump" % name)
+        warn("Unknown profile %r — use: stealth|api|cloud|pentest|aggressive|dump" % name)
         return
     for k, v in p.items():
         setattr(o, k, v)
-    logger.info("Profile [%s] applied — %d settings enabled" % (name, len(p)))
+    info("Profile [%s] loaded — %d settings applied" % (name, len(p)))
+
+
+# ── Subcommand router ─────────────────────────────────────────────────────────
+def _subcommand_translate(argv):
+    """
+    Detect if first arg is a GenSQL subcommand and translate it to flags.
+    gensql scan -t URL  →  gensql.py -t URL
+    gensql dump -t URL  →  gensql.py -t URL --dump
+    gensql bypass -t URL  →  gensql.py -t URL --auto-bypass --bypass-url URL
+    gensql recon -t URL  →  gensql.py -t URL --recon --mine --wayback
+    gensql wizard       →  gensql.py --wizard
+    """
+    if len(argv) < 2:
+        return argv
+
+    sub = argv[1].lower()
+    rest = argv[2:]
+
+    # Handle -t / --target → -u translation
+    def _remap(args):
+        new = []
+        i = 0
+        while i < len(args):
+            if args[i] in ("-t", "--target") and i + 1 < len(args):
+                new += ["-u", args[i + 1]]
+                i += 2
+            elif args[i].startswith("--target="):
+                new += ["-u", args[i].split("=", 1)[1]]
+                i += 1
+            else:
+                new.append(args[i])
+                i += 1
+        return new
+
+    SUBCMDS = {
+        "scan":   [],
+        "dump":   ["--adv-dump", "--dump-creds"],
+        "bypass": ["--auto-bypass"],
+        "recon":  ["--deep-recon", "--wayback", "--js-analysis", "--param-mine"],
+        "wizard": ["--wizard"],
+        "help":   ["-h"],
+    }
+
+    if sub in SUBCMDS:
+        return [argv[0]] + SUBCMDS[sub] + _remap(rest)
+
+    # Not a subcommand — but still remap -t → -u
+    return [argv[0]] + _remap(argv[1:])
 
 
 # ── Interactive wizard ────────────────────────────────────────────────────────
 def _wizard():
-    print("\n\033[01;36m╔══════════════════════════════════════════╗")
-    print("║     GenSQL Wizard  -  by Jeevraj         ║")
-    print("╚══════════════════════════════════════════╝\033[0m\n")
+    print()
+    banner_line("GenSQL Wizard")
+    print()
 
-    url = input("  \033[01;33mTarget URL\033[0m  : ").strip()
-    if not url:
-        print("  [!] No URL provided."); return None
-    if not re.match(r"(?i)https?://", url):
-        url = "http://" + url
+    try:
+        target = input(C.YELLOW + "  Target URL" + C.GRAY + "  : " + C.WHITE).strip()
+        print(C.RESET, end="")
+    except (EOFError, KeyboardInterrupt):
+        print(); return None
 
-    print("\n  \033[01;33mScan Goal\033[0m:")
-    print("    1) Dump database     — enumerate + extract all data")
-    print("    2) Full pentest      — scan + exploit + report  [default]")
-    print("    3) Stealth           — slow, evade WAF/IDS")
-    print("    4) API / GraphQL     — REST / GraphQL / JWT / gRPC")
-    print("    5) Cloud / Serverless — AWS Lambda / Azure / GCP")
-    print("    6) Aggressive        — everything at full speed")
-    c = input("  Goal [1-6, default=2]: ").strip() or "2"
-    pm = {"1": "dump", "2": "pentest", "3": "stealth",
-          "4": "api",  "5": "cloud",   "6": "aggressive"}
-    prof = pm.get(c, "pentest")
+    if not target:
+        warn("No URL provided"); return None
+    if not re.match(r"(?i)https?://", target):
+        target = "http://" + target
 
-    print("\n  \033[01;33mExtra options\033[0m:")
-    waf = input("  Bypass WAF / firewalls?     [Y/n]: ").strip().lower()
-    err = input("  Auto-bypass 403/404/429?    [Y/n]: ").strip().lower()
-    rep = input("  Generate HTML report?       [Y/n]: ").strip().lower()
-    dash= input("  Start live dashboard?       [y/N]: ").strip().lower()
+    print()
+    print(C.GRAY + "  " + "─" * 50)
+    print(C.BOLD + "  Scan goal:" + C.RESET)
+    goals = [
+        ("1", "dump",       "Extract all database data  [fastest]"),
+        ("2", "pentest",    "Full pentest  (scan + exploit + report)  [default]"),
+        ("3", "stealth",    "Stealth  (evade WAF/IDS, slow)"),
+        ("4", "api",        "API targets  (REST/GraphQL/JWT/gRPC)"),
+        ("5", "cloud",      "Cloud/Serverless  (AWS/Azure/GCP)"),
+        ("6", "aggressive", "Aggressive  (everything at full speed)"),
+    ]
+    for n, _, desc in goals:
+        print(C.YELLOW + "    %s" % n + C.GRAY + ")  " + C.WHITE + desc + C.RESET)
+    print()
 
-    extra = ["-u", url, "--profile", prof, "--ai-assist"]
-    if waf  not in ("n", "no"): extra.append("--ai-waf-bypass")
-    if err  not in ("n", "no"): extra.append("--auto-bypass")
-    if rep  not in ("n", "no"): extra += ["--report-html", "gensql_report.html"]
-    if dash in ("y", "yes"):    extra.append("--dashboard")
+    try:
+        c = input(C.YELLOW + "  Goal [1-6, default=2]: " + C.WHITE).strip() or "2"
+        print(C.RESET, end="")
+    except (EOFError, KeyboardInterrupt):
+        print(); return None
 
-    print("\n  \033[01;32m[*] Launching: %s  profile=%s\033[0m\n" % (url, prof))
+    prof = dict((n, p) for n, p, _ in goals).get(c, "pentest")
+
+    print()
+    opts = []
+    try:
+        for question, flag in [
+            ("Bypass WAF / firewalls?   [Y/n]: ", "--auto-bypass"),
+            ("Use AI evasion?           [Y/n]: ", "--ai-evade"),
+            ("Generate HTML report?     [Y/n]: ", "--report gensql_report.html"),
+            ("Start live dashboard?     [y/N]: ", None),
+        ]:
+            ans = input(C.GRAY + "  " + question + C.WHITE).strip().lower()
+            print(C.RESET, end="")
+            if flag and ans not in ("n", "no", ""):
+                opts += flag.split()
+            elif flag is None and ans in ("y", "yes"):
+                opts.append("--live")
+    except (EOFError, KeyboardInterrupt):
+        print()
+
+    extra = ["-u", target, "--profile", prof, "--batch"] + opts
+    print()
+    info("Launching: %s  profile=%s" % (target, prof))
     return extra
 
 
-# ── Bypass engine runner (standalone mode) ────────────────────────────────────
-def _run_bypass(o):
-    """Run the HTTP error bypass engine independently on --bypass-url."""
-    if not HTTPBypass:
-        logger.warning("HTTP bypass engine not available")
-        return
+# ── Map GenSQL args → core engine flags ───────────────────────────────────────
+def _map_to_core_flags(o):
+    """
+    Translate GenSQL parsed args into sys.argv flags that the core engine
+    understands, appended to sys.argv before _strip_gensql_args runs.
+    """
+    extras = []
 
-    target = getattr(o, "bypass_url", None) or getattr(conf, "url", None)
-    if not target:
-        logger.warning("--bypass-url or -u required for bypass mode")
-        return
+    # Speed presets → delay + concurrent
+    speed_map = {"slow": ("3", "5"), "normal": ("0", "20"),
+                 "fast": ("0", "50"), "turbo": ("0", "100")}
+    if hasattr(o, "speed") and o.speed in speed_map:
+        delay, thr = speed_map[o.speed]
+        if delay != "0":
+            extras += ["--delay", delay]
+        extras += ["--threads", thr]
 
-    engine = HTTPBypass(verbose=True)
-    error_map = {
-        "bypass_403": 403, "bypass_404": 404,
-        "bypass_429": 429, "bypass_503": 503,
+    # level/risk
+    if getattr(o, "level", 1) > 1:
+        extras += ["--level", str(o.level)]
+    if getattr(o, "risk", 1) > 1:
+        extras += ["--risk", str(o.risk)]
+
+    # Param
+    if getattr(o, "param", None):
+        extras += ["-p", o.param]
+
+    # DBMS override
+    if getattr(o, "dbms", None):
+        extras += ["--dbms", o.dbms]
+
+    # Technique
+    if getattr(o, "technique", None):
+        extras += ["--technique", o.technique]
+
+    # Tamper — translate 'hex,space,rand' → actual script names
+    tamper_aliases = {
+        "hex":    "charencode",
+        "space":  "space2comment",
+        "rand":   "randomcase",
+        "case":   "randomcase",
+        "base64": "base64encode",
+        "plus":   "plus2concat",
     }
-    error_code = None
-    for attr, code in error_map.items():
-        if getattr(o, attr, False):
-            error_code = code
-            break
+    if getattr(o, "tamper", None):
+        if o.tamper == "auto":
+            pass  # handled by SmartTamper
+        else:
+            scripts = []
+            for t in o.tamper.split(","):
+                scripts.append(tamper_aliases.get(t.strip().lower(), t.strip()))
+            extras += ["--tamper", ",".join(scripts)]
+    elif getattr(o, "evade", False):
+        # Default evasion chain
+        extras += ["--tamper", "space2comment,randomcase,charencode,between"]
 
-    payload = getattr(o, "bypass_payload", None)
-    results = engine.auto_bypass(target, payload=payload, error_code=error_code)
+    # Form data → -d
+    if getattr(o, "form_data", None):
+        extras += ["-d", o.form_data]
 
-    bypasses = results.get("bypasses", [])
+    # Cookie
+    if getattr(o, "cookie", None):
+        extras += ["--cookie", o.cookie]
+
+    # Proxy
+    if getattr(o, "proxy", None):
+        extras += ["--proxy", o.proxy]
+
+    # Extra headers
+    for hdr in (getattr(o, "extra_headers", None) or []):
+        extras += ["-H", hdr]
+
+    # Random-agent when evading
+    if getattr(o, "evade", False) or getattr(o, "ai_evade", False):
+        extras += ["--random-agent"]
+
+    # batch
+    if getattr(o, "batch", False):
+        extras += ["--batch"]
+
+    # verbose
+    if getattr(o, "verbose", False):
+        extras += ["-v", "3"]
+
+    # target -u
+    if getattr(o, "target", None) and "-u" not in sys.argv:
+        extras += ["-u", o.target]
+
+    return extras
+
+
+# ── Bypass standalone mode ────────────────────────────────────────────────────
+def _run_standalone_bypass(o):
+    """Run bypass engine standalone when no scan target is needed."""
+    if not HTTPBypass:
+        warn("HTTP bypass module not loaded"); return
+
+    target = getattr(o, "target", None)
+    if not target:
+        warn("Specify --target URL"); return
+
+    banner_line("HTTP Error Bypass")
+    info("Target: " + target)
+
+    code = getattr(o, "bypass_code", None)
+    engine = HTTPBypass(verbose=True)
+    result = engine.auto_bypass(target, error_code=code)
+
+    bypasses = result.get("bypasses", [])
+    print()
     if bypasses:
-        dataToStdout("\n\033[01;32m[+] %d bypass(es) found!\033[0m\n" % len(bypasses),
-                     forceOutput=True)
+        success("%d bypass technique(s) worked:" % len(bypasses))
         for b in bypasses:
-            dataToStdout("  %-25s status=%-3d  %s\n" % (
-                b.get("technique", "?"), b.get("status", 0),
-                b.get("variant") or b.get("header", "")), forceOutput=True)
+            print(C.GRAY + "    %-30s" % b.get("technique", "?")
+                  + C.CYAN + "HTTP " + str(b.get("status", "?"))
+                  + C.GRAY + "  " + str(b.get("variant") or b.get("header") or "")
+                  + C.RESET)
     else:
-        dataToStdout("\033[01;31m[-] No bypasses found for %s\033[0m\n" % target,
-                     forceOutput=True)
+        error("No bypasses found for HTTP %d" % result.get("original_status", 0))
 
     stats = engine.get_stats()
-    logger.info("Bypass stats: %d attempts, %d successful" %
-                (stats["attempts"], stats["bypassed"]))
+    info("Attempts: %d  |  Succeeded: %d" % (stats["attempts"], stats["bypassed"]))
+
+
+# ── Module initialisation ─────────────────────────────────────────────────────
+def _init_modules(o):
+    if getattr(o, "ai_evade", False) and AIPayloadEngine:
+        conf.aiEngine = AIPayloadEngine(offline=True, dbms=getattr(conf, "dbms", None))
+        info("AI evasion engine active  (offline)")
+
+    if AsyncScanEngine and getattr(o, "speed", "normal") == "turbo":
+        conf.asyncEngine = AsyncScanEngine(max_concurrent=100)
+        info("Async turbo engine active")
+
+    if getattr(o, "evade", False) or getattr(o, "ai_evade", False):
+        if AIWAFBypass:
+            conf.aiwafBypass = AIWAFBypass()
+            info("AI WAF bypass active")
+
+    if getattr(o, "auto_bypass", False) and HTTPBypass:
+        conf.httpBypass = HTTPBypass(verbose=False)
+        info("HTTP error bypass active  (403/404/429/503)")
+
+    if getattr(o, "encoder_chain", None) and EncoderChain:
+        conf.encoderChain = EncoderChain(o.encoder_chain.split(","))
+
+    if getattr(o, "graphql", False) and GraphQLInj:
+        conf.graphqlInj = GraphQLInj()
+        info("GraphQL injector active")
+
+    if getattr(o, "nosql", False) and NoSQLInj:
+        conf.nosqlInj = NoSQLInj(db_type=getattr(o, "nosql_type", "mongodb"))
+        info("NoSQL injector active")
+
+    if getattr(o, "jwt", False) and JWTAttacker:
+        conf.jwtAttacker = JWTAttacker()
+        info("JWT attack suite active")
+
+    if getattr(o, "grpc", False) and GRPCInj:
+        conf.grpcInj = GRPCInj()
+        info("gRPC injector active")
+
+    if getattr(o, "ssti", False) and AdvSSTI:
+        conf.sstiScanner = AdvSSTI()
+        info("SSTI scanner active")
+
+    if getattr(o, "cloud", False) and CloudInj:
+        conf.cloudInj = CloudInj(provider=getattr(o, "provider", "auto"),
+                                  ssrf_metadata=getattr(o, "ssrf_meta", False))
+        info("Cloud injector active")
+
+    if getattr(o, "recon", False) and DeepRecon:
+        conf.deepRecon = DeepRecon(
+            wayback=getattr(o, "wayback", False),
+            js_analysis=getattr(o, "js", False),
+            subdomain_enum=getattr(o, "subdomains", False))
+        info("Deep recon active")
+
+    if getattr(o, "mine", False) and ParamMiner:
+        conf.paramMiner = ParamMiner(swagger_url=getattr(o, "swagger_url", None))
+        info("Param miner active")
+
+    if getattr(o, "exploit", False) and ExploitChain:
+        conf.exploitChain = ExploitChain(
+            harvest_creds=getattr(o, "harvest", False),
+            privesc=getattr(o, "privesc", False))
+        info("Exploit chain active")
+
+    if getattr(o, "oob", False) and OOBExfil:
+        conf.oobExfil = OOBExfil(
+            domain=getattr(o, "oob_host", None),
+            listen_port=getattr(o, "oob_port", 0))
+        info("OOB exfiltration active")
+
+    if getattr(o, "report", None) and ReportEngine:
+        conf.reportEngine = ReportEngine(
+            html_path=o.report,
+            json_path=getattr(o, "report_json", None),
+            cvss4=getattr(o, "cvss", False))
+        info("Report engine active → %s" % o.report)
+
+    if getattr(o, "live", False):
+        try:
+            from lib.report.dashboard import Dashboard
+            conf.dashboard = Dashboard(port=getattr(o, "live_port", 7474))
+            conf.dashboard.start()
+            info("Live dashboard → http://127.0.0.1:%d" % getattr(o, "live_port", 7474))
+        except Exception as ex:
+            warn("Dashboard unavailable: %s" % str(ex)[:60])
 
 
 # ── Advanced dump runner ──────────────────────────────────────────────────────
 def _run_adv_dump(o):
-    """Run the advanced dump engine after a confirmed SQLi scan."""
+    """Run the advanced dump engine after a confirmed injection scan."""
     if not AdvDumpEngine:
-        logger.warning("Advanced dump engine not available")
-        return
+        warn("Advanced dump engine not available"); return
 
     url = getattr(conf, "url", None)
     if not url:
         return
 
-    # ── Guard: only run if SQLi was actually confirmed ────────────────────────
+    # Guard: only dump after confirmed injection
     if not getattr(o, "force_dump", False):
         try:
             from lib.core.data import kb as _kb
             injections = list(_kb.get("injections") or [])
             if not injections:
-                logger.warning(
-                    "[GenSQL][DUMP] No SQL injection confirmed — skipping dump. "
-                    "Add --force-dump to override.")
+                warn("No injection confirmed — skipping dump  (use --force-dump to override)")
                 return
-            logger.info("[GenSQL][DUMP] %d injection vector(s) confirmed — starting dump"
-                        % len(injections))
+            success("%d injection vector(s) confirmed — starting advanced dump" % len(injections))
         except Exception:
-            pass  # can't check — proceed anyway
+            pass
 
-    # Map technique flags
-    technique = getattr(o, "dump_technique", "auto")
-    if getattr(o, "dump_blind",   False): technique = "blind"
-    if getattr(o, "dump_bitwise", False): technique = "bitwise"
-    if getattr(o, "dump_time",    False): technique = "time"
-    if getattr(o, "dump_error",   False): technique = "error"
+    # Technique selection
+    technique = "auto"
+    if getattr(o, "blind",   False): technique = "blind"
+    if getattr(o, "bitwise", False): technique = "bitwise"
+    if getattr(o, "dump",    False) and not technique: technique = "auto"
 
-    # Get DBMS detected during scan
     dbms = (getattr(conf, "dbms", None) or "mysql").lower().split()[0]
-    checkpoint = "gensql_dump_checkpoint.json" if getattr(o, "dump_resume", False) else None
+    checkpoint = "gensql_dump.checkpoint" if getattr(o, "resume", False) else None
 
     dump = AdvDumpEngine(
         dbms=dbms,
-        threads=getattr(o, "dump_threads", 4),
-        chunk_size=getattr(o, "dump_chunk", 50),
+        threads=getattr(o, "threads", 4),
+        chunk_size=getattr(o, "chunk", 50),
         delay=getattr(conf, "timeSec", 0) or 0,
         verbose=True,
         checkpoint_file=checkpoint,
     )
 
-    # ── Reliable HTTP requester using scan-engine cookies + SSL bypass ─────────
-    def _make_requester(base_url):
+    # Build requester from real URL + session cookies
+    def _make_req(base_url):
         import urllib.request, urllib.error, urllib.parse, ssl, socket
 
-        # Parse param name from URL (use first param, not hardcoded "id")
         parsed = urllib.parse.urlparse(base_url)
-        qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-        param_name = list(qs.keys())[0] if qs else "id"
+        qs     = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        param  = list(qs.keys())[0] if qs else "id"
 
-        # SSL context: fully bypass cert errors
-        try:
-            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            try: ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
-            except Exception: pass
-        except Exception:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try: ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
+        except Exception: pass
 
-        # Inherit cookies from scan session
         cookie_hdr = ""
         try:
-            for source in (getattr(conf, "httpHeaders", {}),
-                           {"Cookie": getattr(conf, "cookie", "")}):
-                c = source.get("Cookie", "") or source.get("cookie", "")
+            for src in (getattr(conf, "httpHeaders", {}),
+                        {"Cookie": getattr(conf, "cookie", "")}):
+                c = src.get("Cookie", "") or src.get("cookie", "")
                 if c: cookie_hdr = c; break
         except Exception: pass
 
-        ua = "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0"
-        try:
-            ua = (getattr(conf, "httpHeaders", {}) or {}).get("User-Agent", ua) or ua
-        except Exception: pass
+        ua = "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0"
 
-        def requester(payload):
-            new_qs = {k: v[0] for k, v in qs.items()}
-            new_qs[param_name] = payload
+        def req(payload):
+            nq = {k: v[0] for k, v in qs.items()}
+            nq[param] = payload
             test_url = urllib.parse.urlunparse(
-                parsed._replace(query=urllib.parse.urlencode(new_qs)))
-
-            req = urllib.request.Request(test_url)
-            req.add_header("User-Agent", ua)
-            req.add_header("Accept", "text/html,*/*;q=0.9")
-            req.add_header("Accept-Language", "en-US,en;q=0.9")
-            if cookie_hdr: req.add_header("Cookie", cookie_hdr)
-
-            # Hard socket timeout so SSL hangs don't freeze the tool
-            old_to = socket.getdefaulttimeout()
+                parsed._replace(query=urllib.parse.urlencode(nq)))
+            r = urllib.request.Request(test_url)
+            r.add_header("User-Agent", ua)
+            r.add_header("Accept", "text/html,*/*")
+            if cookie_hdr: r.add_header("Cookie", cookie_hdr)
+            old = socket.getdefaulttimeout()
             socket.setdefaulttimeout(8)
             try:
-                with urllib.request.urlopen(req, context=ctx, timeout=8) as r:
-                    return r.status, r.read(512000).decode("utf-8", errors="replace")
+                with urllib.request.urlopen(r, context=ctx, timeout=8) as resp:
+                    return resp.status, resp.read(512000).decode("utf-8", errors="replace")
             except urllib.error.HTTPError as e:
-                try:
-                    body = e.read(8192).decode("utf-8", errors="replace")
-                except Exception:
-                    body = ""
-                return e.code, body
-            except ssl.SSLError as e:
-                logger.debug("[DUMP] SSL: %s" % str(e)[:80])
-                return 0, ""
-            except (socket.timeout, TimeoutError, OSError):
-                return 0, ""
-            except Exception as ex:
-                logger.debug("[DUMP] Req error: %s" % str(ex)[:80])
+                return e.code, ""
+            except Exception:
                 return 0, ""
             finally:
-                socket.setdefaulttimeout(old_to)
+                socket.setdefaulttimeout(old)
+        return req, param
 
-        return requester, param_name
-
-    req_fn, param_name = _make_requester(url)
-    logger.info("[GenSQL][DUMP] Param: %r | DBMS: %s | Technique: %s"
-                % (param_name, dbms, technique))
+    req_fn, param = _make_req(url)
+    info("Dump param: %r | DBMS: %s | Technique: %s" % (param, dbms, technique))
     dump.set_requester(req_fn)
 
-    # Wrap with auto-bypass if requested
+    # Wrap with bypass if requested
     if getattr(o, "auto_bypass", False) and HTTPBypass:
-        bp_eng = HTTPBypass(verbose=False)
-        _orig = dump.requester
-        def _bypass_req(payload):
-            code, body = _orig(payload)
+        bp = HTTPBypass(verbose=False)
+        orig = dump.requester
+        def _bp_req(p):
+            code, body = orig(p)
             if code in (403, 404, 429, 503):
-                logger.info("[DUMP] HTTP %d — trying bypass..." % code)
-                bp = bp_eng.best_bypass(url, error_code=code)
-                if bp:
-                    logger.info("[DUMP] Bypass: %s" % bp.get("technique"))
+                info("HTTP %d during dump — trying bypass..." % code)
+                r = bp.best_bypass(url, error_code=code)
+                if r: info("Bypass: " + r.get("technique", "?"))
             return code, body
-        dump.set_requester(_bypass_req)
+        dump.set_requester(_bp_req)
 
-    # ── Run the actual dump ────────────────────────────────────────────────────
-    if getattr(o, "dump_creds", False):
-        logger.info("[GenSQL][DUMP] Targeting credential/user tables...")
+    # Run
+    if getattr(o, "creds", False):
+        info("Targeting credential tables...")
         creds = dump.dump_credentials()
-        logger.info("[GenSQL][DUMP] Credential entries: %d" % len(creds))
+        info("Credential entries found: %d" % len(creds))
 
-    tbl = getattr(o, "dump_table", None)
-    cols = ([c.strip() for c in o.dump_columns.split(",")]
-            if getattr(o, "dump_columns", None) else None)
+    tbl  = getattr(o, "table", None)
+    cols = ([c.strip() for c in o.columns.split(",")]
+            if getattr(o, "columns", None) else None)
 
     if tbl:
-        dump.dump_table(tbl, cols, technique=technique,
-                        hex_encode=getattr(o, "dump_hex", False))
-    elif getattr(o, "dump_all_tables", False):
+        dump.dump_table(tbl, cols, technique=technique, hex_encode=getattr(o, "hex", False))
+    elif getattr(o, "dump", False):
         tables = dump.get_tables()
         if tables:
-            logger.info("[GenSQL][DUMP] Tables: %s" % ", ".join(tables))
+            info("Tables found: %s" % ", ".join(tables))
             tbl_cols = {t: dump.get_columns(t) or ["*"] for t in tables}
-            if getattr(o, "dump_parallel", False):
+            if getattr(o, "parallel", False):
                 dump.dump_all_tables(tbl_cols, technique=technique)
             else:
                 for t, c in tbl_cols.items():
                     dump.dump_table(t, c, technique=technique,
-                                    hex_encode=getattr(o, "dump_hex", False))
+                                    hex_encode=getattr(o, "hex", False))
         else:
-            logger.warning("[GenSQL][DUMP] Could not enumerate tables — "
-                           "try: --dump-table users")
+            warn("Could not enumerate tables — try --table users")
 
     dump.print_summary()
 
-    out = getattr(o, "dump_output", None)
+    out = getattr(o, "out", None)
     if out and dump._results:
         ext = os.path.splitext(out)[1].lower()
         path_out = None
@@ -611,168 +969,32 @@ def _run_adv_dump(o):
         else:
             for t in dump._results: path_out = dump.export_csv(t, out)
         if path_out:
-            logger.info("[GenSQL][DUMP] Saved to: %s" % path_out)
+            success("Dump saved → %s" % path_out)
 
-# ── Module initialisation ─────────────────────────────────────────────────────
-def _init(o):
-    if getattr(o, "ai_assist", False) and AIPayloadEngine:
-        conf.aiEngine = AIPayloadEngine(offline=True, dbms=getattr(conf, "dbms", None))
-        logger.info("AI engine active (offline)")
-
-    if getattr(o, "async_engine", False) and AsyncScanEngine:
-        conf.asyncEngine = AsyncScanEngine(
-            max_concurrent=getattr(o, "max_concurrent", 50),
-            http_version="http2" if getattr(o, "http2", False) else "auto")
-        logger.info("Async engine active (%d concurrent)" % getattr(o, "max_concurrent", 50))
-
-    if getattr(o, "ai_waf_bypass", False) and AIWAFBypass:
-        conf.aiwafBypass = AIWAFBypass()
-        if getattr(o, "humanize", False):
-            try: conf.aiwafBypass.enable_humanization()
-            except Exception: pass
-        logger.info("AI WAF bypass active")
-
-    # HTTP Error Bypass auto-mode
-    if (getattr(o, "auto_bypass", False) or
-            any(getattr(o, f, False) for f in
-                ("bypass_403","bypass_404","bypass_429","bypass_503"))) and HTTPBypass:
-        conf.httpBypass = HTTPBypass(verbose=False)
-        logger.info("HTTP error bypass active (403/404/429/503)")
-
-    if getattr(o, "encoder_chain", None) and EncoderChain:
-        conf.encoderChain = EncoderChain(o.encoder_chain.split(","))
-
-    if getattr(o, "graphql_inject", False) and GraphQLInj:
-        conf.graphqlInjector = GraphQLInj(do_introspect=getattr(o, "graphql_introspect", False))
-        logger.info("GraphQL injector active")
-
-    if getattr(o, "nosql_inject", False) and NoSQLInj:
-        conf.nosqlInjector = NoSQLInj(db_type=getattr(o, "nosql_type", "mongodb"))
-        logger.info("NoSQL injector active (%s)" % getattr(o, "nosql_type", "mongodb"))
-
-    if getattr(o, "jwt_attack", False) and JWTAttacker:
-        conf.jwtAttacker = JWTAttacker(bruteforce=getattr(o, "jwt_bruteforce", False))
-        logger.info("JWT attacker active")
-
-    if getattr(o, "grpc_inject", False) and GRPCInj:
-        conf.grpcInjector = GRPCInj()
-        logger.info("gRPC injector active")
-
-    if getattr(o, "ssti_inject", False) and AdvSSTI:
-        conf.sstiScanner = AdvSSTI()
-        logger.info("SSTI scanner active")
-
-    if getattr(o, "cloud_scan", False) and CloudInj:
-        conf.cloudInjector = CloudInj(
-            provider=getattr(o, "cloud_provider", "auto"),
-            ssrf_metadata=getattr(o, "ssrf_metadata", False))
-        logger.info("Cloud injector active")
-
-    if getattr(o, "deep_recon", False) and DeepRecon:
-        conf.deepRecon = DeepRecon(
-            wayback=getattr(o, "wayback", False),
-            js_analysis=getattr(o, "js_analysis", False),
-            subdomain_enum=getattr(o, "subdomain_enum", False),
-            shodan_key=getattr(o, "shodan_key", None))
-        logger.info("Deep recon active")
-
-    if getattr(o, "param_mine", False) and ParamMiner:
-        conf.paramMiner = ParamMiner(swagger_url=getattr(o, "swagger_url", None))
-        logger.info("Param miner active")
-
-    if getattr(o, "exploit_chain", False) and ExploitChain:
-        conf.exploitChain = ExploitChain(
-            harvest_creds=getattr(o, "harvest_creds", False),
-            privesc=getattr(o, "privesc_check", False),
-            lateral=getattr(o, "lateral_move", False))
-        logger.info("Exploit chain active")
-
-    if getattr(o, "oob_exfil", False) and OOBExfil:
-        conf.oobExfil = OOBExfil(
-            domain=getattr(o, "oob_domain", None),
-            http_callback=getattr(o, "oob_http", None),
-            listen_port=getattr(o, "oob_listen", 0))
-        logger.info("OOB exfiltration active")
-
-    if (getattr(o, "report_html", None) or getattr(o, "report_json", None) or
-            getattr(o, "report_md", None)) and ReportEngine:
-        conf.reportEngine = ReportEngine(
-            html_path=getattr(o, "report_html", None),
-            json_path=getattr(o, "report_json", None),
-            md_path=getattr(o, "report_md", None),
-            cvss4=getattr(o, "cvss4", False))
-        logger.info("Report engine active")
-
-    if getattr(o, "dashboard", False):
-        try:
-            from lib.report.dashboard import Dashboard
-            conf.dashboard = Dashboard(port=getattr(o, "dashboard_port", 7474))
-            conf.dashboard.start()
-            logger.info("Live dashboard → http://127.0.0.1:%d" % getattr(o, "dashboard_port", 7474))
-        except Exception as ex:
-            logger.warning("Dashboard unavailable: %s" % getSafeExString(ex))
-
-    if getattr(o, "idor_scan", False) and RESTInj:
-        try:
-            s, e = map(int, getattr(o, "idor_range", "1-1000").split("-"))
-        except Exception:
-            s, e = 1, 1000
-        conf.idorScanner = RESTInj(idor_start=s, idor_end=e)
-        logger.info("IDOR scanner active (range %d-%d)" % (s, e))
-
-
-# ── Recon ─────────────────────────────────────────────────────────────────────
-def _recon(o):
-    if not (getattr(o, "deep_recon", False) and hasattr(conf, "deepRecon")):
-        return
-    url = getattr(conf, "url", None)
-    if not url: return
-    m = re.search(r"https?://([^/]+)", url)
-    if not m: return
-    try:
-        findings = conf.deepRecon.generate_recon_report(m.group(1))
-        for key, label in [("technologies","Tech"),("cloud_provider","Cloud"),
-                            ("subdomains","Subdomains"),("api_endpoints","API endpoints")]:
-            v = findings.get(key)
-            if v: logger.info("%s: %s" % (label, ", ".join(v) if isinstance(v,list) else str(v)))
-        kb.genReconFindings = findings
-    except Exception as ex:
-        logger.warning("Recon error: %s" % getSafeExString(ex))
-
-
-# ── Standalone bypass mode ────────────────────────────────────────────────────
-def _maybe_run_bypass_standalone(o):
-    """If --bypass-url is given without a -u scan, run bypass and exit."""
-    if getattr(o, "bypass_url", None):
-        _run_bypass(o)
-        return True
-    # Also run if any bypass flag set with no scan target
-    bypass_flags = ("bypass_403","bypass_404","bypass_429","bypass_503","auto_bypass")
-    if any(getattr(o, f, False) for f in bypass_flags):
-        if not any(f in sys.argv for f in ("-u","--url","-r","--data","-m","-l")):
-            logger.warning("Specify a target with -u URL or --bypass-url URL")
-    return False
+    # Hash identification on found data
+    if HashIdentifier and dump._results:
+        hid = HashIdentifier()
+        for tbl_name, rows in dump._results.items():
+            for row in rows:
+                for k, v in row.items():
+                    if k.startswith("__"): continue
+                    found = hid.identify_all(str(v))
+                    for h in found:
+                        if h["confidence"] >= 75:
+                            info("Hash detected in %s.%s : %s  [%s, %d%% confidence]"
+                                 % (tbl_name, k, h["hash"][:20] + "...",
+                                    h["type"], h["confidence"]))
 
 
 # ── Finalise ──────────────────────────────────────────────────────────────────
 def _finalize(o):
-    # Run advanced dump after scan if requested
-    if getattr(o, "adv_dump", False):
+    # Run advanced dump after scan
+    if getattr(o, "dump", False) or getattr(o, "creds", False) or getattr(o, "table", None):
         try: _run_adv_dump(o)
-        except Exception as ex: logger.warning("Dump error: %s" % getSafeExString(ex))
+        except Exception as ex: warn("Dump error: %s" % str(ex)[:80])
 
     if hasattr(conf, "reportEngine"):
-        try: conf.reportEngine.finalize(); logger.info("Reports written")
-        except Exception as ex: logger.warning("Report error: %s" % getSafeExString(ex))
-
-    top_n = getattr(o, "ai_top_payloads", 0)
-    if top_n > 0 and hasattr(conf, "aiEngine"):
-        try:
-            top = conf.aiEngine.get_best_payloads(count=top_n)
-            if top:
-                dataToStdout("\n\033[01;36m[*] Top AI payloads:\033[0m\n", forceOutput=True)
-                for i, (pl, sc) in enumerate(top, 1):
-                    dataToStdout("  %2d. [%.3f] %s\n" % (i, sc, pl), forceOutput=True)
+        try: conf.reportEngine.finalize(); success("Reports written")
         except Exception: pass
 
     if hasattr(conf, "dashboard"):
@@ -783,6 +1005,9 @@ def _finalize(o):
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     """GenSQL v2.0.0 — by Jeevraj"""
+
+    # 0. Route subcommands and remap -t → -u
+    sys.argv = _subcommand_translate(sys.argv)
 
     # 1. Wizard
     if "--wizard" in sys.argv:
@@ -796,29 +1021,48 @@ def main():
         except (KeyboardInterrupt, EOFError):
             print(); sys.exit(0)
 
-    # 2. Parse GenSQL flags
-    o, _parser = _args()
+    # 2. Parse GenSQL args
+    o, _parser = _parse_args()
+
+    # Show version
+    if getattr(o, "version", False):
+        print("GenSQL v2.0.0 by Jeevraj"); sys.exit(0)
 
     # 3. Apply profile
     if getattr(o, "profile", None):
-        _profile(o.profile, o)
+        _apply_profile(o.profile, o)
 
-    # 4. Standalone bypass mode (no scan needed)
-    if _maybe_run_bypass_standalone(o):
-        return
+    # 4. Standalone bypass (no scan needed)
+    if getattr(o, "target", None) and "--adv-dump" not in sys.argv:
+        bypass_only = any(getattr(o, f, False)
+                          for f in ("auto_bypass", "bypass_code"))
+        if bypass_only and not any(f in sys.argv for f in
+                                    ("-u","--target","--dump","--level")):
+            _run_standalone_bypass(o); return
 
-    # 5. Strip GenSQL flags from sys.argv before core parser
+    # 5. Translate GenSQL flags → core engine argv
+    extra_core = _map_to_core_flags(o)
+    for flag in extra_core:
+        if flag not in sys.argv:
+            sys.argv.append(flag)
+
+    # 6. Strip GenSQL flags from argv before core parser runs
     sys.argv = _strip_gensql_args(sys.argv)
 
     try:
-        dirtyPatches(); resolveCrossReferences(); checkEnvironment(); setPaths(modulePath())
-        printBanner()
+        dirtyPatches()
+        resolveCrossReferences()
+        checkEnvironment()
+        setPaths(modulePath())
+
+        printBanner(no_banner=getattr(o, "no_banner", False))
 
         args = cmdLineParser()
         cmdLineOptions.update(args.__dict__ if hasattr(args, "__dict__") else args)
         initOptions(cmdLineOptions)
 
-        if checkPipedInput(): conf.batch = True
+        if checkPipedInput():
+            conf.batch = True
 
         if conf.get("api"):
             from lib.utils.api import StdDbOut, setRestAPILog
@@ -826,40 +1070,64 @@ def main():
             sys.stderr = StdDbOut(conf.taskid, messagetype="stderr")
             setRestAPILog()
 
-        conf.showTime = True
-        dataToStdout("[!] legal disclaimer: %s\n\n" % LEGAL_DISCLAIMER, forceOutput=True)
-        dataToStdout("[*] starting @ %s\n\n" % time.strftime("%X /%Y-%m-%d/"), forceOutput=True)
-
-        init()
-
-        # Disable SSL cert verification globally (GenSQL handles this)
+        # Disable SSL cert verification globally
         try:
             import ssl as _ssl
             _ssl._create_default_https_context = _ssl._create_unverified_context
         except Exception:
             pass
 
-        # Auto-accept server-set cookies when --batch is active
+        # Auto-accept cookies in batch mode
         try:
             if conf.get("batch") or "--batch" in sys.argv:
                 conf.getCookies = True
         except Exception:
             pass
 
-        _init(o)
-        _recon(o)
+        conf.showTime = True
+
+        # GenSQL legal notice (shorter, different from sqlmap)
+        dataToStdout(
+            C.GRAY + "\n  [" + C.YELLOW + "LEGAL" + C.GRAY + "] "
+            + C.WHITE + LEGAL_DISCLAIMER + C.RESET + "\n\n",
+            forceOutput=True)
+
+        dataToStdout(
+            C.GRAY + "  [" + C.CYAN + "START" + C.GRAY + "] "
+            + C.WHITE + time.strftime("%Y-%m-%d %H:%M:%S") + C.RESET + "\n\n",
+            forceOutput=True)
+
+        init()
+        _init_modules(o)
+
+        # Recon phase
+        if getattr(o, "recon", False) and hasattr(conf, "deepRecon"):
+            url = getattr(conf, "url", None)
+            if url:
+                m = re.search(r"https?://([^/]+)", url)
+                if m:
+                    try:
+                        findings = conf.deepRecon.generate_recon_report(m.group(1))
+                        for key, label in [
+                            ("technologies", "Tech"),
+                            ("subdomains",   "Subdomains"),
+                            ("api_endpoints","API endpoints"),
+                        ]:
+                            v = findings.get(key)
+                            if v:
+                                info("%s: %s" % (
+                                    label,
+                                    ", ".join(v) if isinstance(v, list) else str(v)))
+                    except Exception as ex:
+                        warn("Recon: %s" % str(ex)[:60])
 
         if not conf.updateAll:
             if conf.smokeTest:
-                from lib.core.testing import smokeTest; os._exitcode = 1 - (smokeTest() or 0)
+                from lib.core.testing import smokeTest
+                os._exitcode = 1 - (smokeTest() or 0)
             elif conf.vulnTest:
-                from lib.core.testing import vulnTest; os._exitcode = 1 - (vulnTest() or 0)
-            elif conf.fpTest:
-                from lib.core.testing import fpTest; os._exitcode = 1 - (fpTest() or 0)
-            elif conf.payloadLint:
-                from lib.core.testing import payloadLintTest; os._exitcode = 1 - (payloadLintTest() or 0)
-            elif conf.apiTest:
-                from lib.core.testing import apiTest; os._exitcode = 1 - (apiTest() or 0)
+                from lib.core.testing import vulnTest
+                os._exitcode = 1 - (vulnTest() or 0)
             else:
                 from lib.controller.controller import start
                 if conf.profile:
@@ -872,11 +1140,11 @@ def main():
                                     kb.targets = OrderedSet()
                                     if not re.search(r"(?i)\Ahttp[s]*://", tgt):
                                         tgt = "https://" + tgt
-                                    logger.info("crawling %r (%d)" % (tgt, i + 1))
+                                    info("Crawling (%d): %r" % (i + 1, tgt))
                                     crawl(tgt)
                                 except Exception as ex:
                                     if not isinstance(ex, SqlmapUserQuitException):
-                                        logger.error("crawl error: %s" % getSafeExString(ex))
+                                        error("Crawl: %s" % getSafeExString(ex))
                                     else: raise
                                 else:
                                     if kb.targets: start()
@@ -885,35 +1153,39 @@ def main():
                     except Exception as ex:
                         os._exitcode = 1
                         if "can't start new thread" in getSafeExString(ex):
-                            logger.critical("unable to start new threads"); raise SystemExit
+                            fatal("Cannot start threads"); raise SystemExit
                         else: raise
 
     except SqlmapUserQuitException:
-        if not conf.batch: logger.error("user quit")
+        if not conf.batch: warn("Scan aborted by user")
     except (SqlmapSilentQuitException, bdb.BdbQuit): pass
     except SqlmapShellQuitException: cmdLineOptions.sqlmapShell = False
     except SqlmapBaseException as ex:
-        logger.critical(getSafeExString(ex)); os._exitcode = 1; raise SystemExit
+        fatal(getSafeExString(ex)); os._exitcode = 1; raise SystemExit
     except KeyboardInterrupt:
         try: print()
         except IOError: pass
-    except EOFError: print(); logger.error("exit")
-    except SystemExit as ex: os._exitcode = ex.code or 0
+    except EOFError:
+        print(); warn("EOF — exiting")
+    except SystemExit as ex:
+        os._exitcode = ex.code or 0
     except Exception:
         print()
         errMsg = unhandledExceptionMessage()
         excMsg = traceback.format_exc()
         os._exitcode = 255
-        errMsg = maskSensitiveData(errMsg); excMsg = maskSensitiveData(excMsg)
-        logger.critical(errMsg)
-        dataToStdout("%s\n" % setColor(excMsg.strip(), level=logging.CRITICAL))
-        if not codeIsModified(): createGithubIssue(errMsg, excMsg)
+        errMsg = maskSensitiveData(errMsg)
+        excMsg = maskSensitiveData(excMsg)
+        fatal(errMsg)
+        dataToStdout(setColor(excMsg.strip(), level=logging.CRITICAL) + "\n")
+        if not codeIsModified():
+            createGithubIssue(errMsg, excMsg)
     finally:
         kb.threadContinue = False
         try: _finalize(o)
         except Exception: pass
         if (getDaysFromLastUpdate() or 0) > LAST_UPDATE_NAGGING_DAYS:
-            logger.warning("GenSQL is outdated — pull the latest version")
+            warn("GenSQL update available — git pull")
         if conf.get("reportCollector") is not None:
             try:
                 from lib.utils.api import writeReportJson
@@ -923,7 +1195,11 @@ def main():
                 try: conf.reportCollector.disconnect()
                 except Exception: pass
         if conf.get("showTime"):
-            dataToStdout("\n[*] ending @ %s\n\n" % time.strftime("%X /%Y-%m-%d/"), forceOutput=True)
+            dataToStdout(
+                C.GRAY + "\n  [" + C.CYAN + "DONE" + C.GRAY + "]  "
+                + C.WHITE + time.strftime("%Y-%m-%d %H:%M:%S")
+                + C.RESET + "\n\n",
+                forceOutput=True)
         kb.threadException = True
         for tmpDir in conf.get("tempDirs", []):
             for pfx in (MKSTEMP_PREFIX.IPC, MKSTEMP_PREFIX.TESTING,
@@ -935,7 +1211,8 @@ def main():
         if conf.get("harFile"):
             try:
                 with openFile(conf.harFile, "w+") as f:
-                    json.dump(conf.httpCollector.obtain(), fp=f, indent=4, separators=(",", ": "))
+                    json.dump(conf.httpCollector.obtain(), fp=f, indent=4,
+                              separators=(",", ": "))
             except SqlmapBaseException: pass
         if conf.get("api"): conf.databaseCursor.disconnect()
         if conf.get("dumper"): conf.dumper.flush()
@@ -948,13 +1225,19 @@ def main():
 
 
 if __name__ == "__main__":
-    try: main()
-    except KeyboardInterrupt: pass
-    except SystemExit: raise
-    except Exception: traceback.print_exc()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except SystemExit:
+        raise
+    except Exception:
+        traceback.print_exc()
     finally:
-        if threading.active_count() > 1: os._exit(getattr(os, "_exitcode", 0))
-        else: sys.exit(getattr(os, "_exitcode", 0))
+        if threading.active_count() > 1:
+            os._exit(getattr(os, "_exitcode", 0))
+        else:
+            sys.exit(getattr(os, "_exitcode", 0))
 else:
     __import__("lib.controller.controller")
     from lib.utils.library import scan, scanFromRequest, SqlmapError
