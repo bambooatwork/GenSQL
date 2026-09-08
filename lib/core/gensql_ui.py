@@ -386,7 +386,10 @@ def install(verbose=False):
                     lambda m: _convert_sqlmap_log(m.group(1), m.group(2)),
                     data
                 )
-            return _orig_dataToStdout(data, forceOutput=forceOutput, bold=bold, level=level, **kw)
+            # 'level' is not a valid parameter for the original dataToStdout();
+            # swallow it here so callers that pass level=... don't crash.
+            kw.pop('level', None)
+            return _orig_dataToStdout(data, forceOutput=forceOutput, bold=bold, **kw)
 
         _common.dataToStdout = _patched_dataToStdout
     except Exception:
@@ -424,7 +427,6 @@ def print_injection_found(param, technique, dbms, payload):
     sys.stdout.write("  ║  Payload   : " + C.YELLOW + "%-*s" % (width - 18, payload[:width-18]) + C.GREEN + "║\n")
     sys.stdout.write("  ╚" + "═" * (width - 2) + "╝\n" + C.RESET)
     sys.stdout.flush()
-
 
 def print_dump_table(table_name, columns, rows):
     """Print a dump result table with GenSQL styling."""
