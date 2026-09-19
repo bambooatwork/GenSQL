@@ -434,7 +434,6 @@ def print_injection_found(param, technique, dbms, payload):
     sys.stdout.write("  ╚" + "═" * (width - 2) + "╝\n" + C.RESET)
     sys.stdout.flush()
 
-
 def print_dump_table(table_name, columns, rows):
     """Print a dump result table with GenSQL styling."""
     banner_line("TABLE: %s  (%d rows)" % (table_name, len(rows)))
