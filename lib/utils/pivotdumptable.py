@@ -197,12 +197,12 @@ def pivotDumpTable(table, colList, count=None, blind=True, alias=None):
     except KeyboardInterrupt:
         kb.dumpKeyboardInterrupt = True
 
-        warnMsg = "user aborted during enumeration. sqlmap "
+        warnMsg = "user aborted during enumeration. GenSQL "
         warnMsg += "will display partial output"
         logger.warning(warnMsg)
 
     except SqlmapConnectionException as ex:
-        errMsg = "connection exception detected ('%s'). sqlmap " % getSafeExString(ex)
+        errMsg = "connection exception detected ('%s'). GenSQL " % getSafeExString(ex)
         errMsg += "will display partial output"
 
         logger.critical(errMsg)

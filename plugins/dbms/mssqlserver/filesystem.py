@@ -234,7 +234,7 @@ class Filesystem(GenericFilesystem):
             self.execCmd(" & ".join(command for command in commands))
         else:
             debugMsg = "the file is larger than %d bytes. " % debugSize
-            debugMsg += "sqlmap will split it into chunks locally, upload "
+            debugMsg += "GenSQL will split it into chunks locally, upload "
             debugMsg += "it chunk by chunk and recreate the original file "
             debugMsg += "on the server, please wait.."
             logger.debug(debugMsg)

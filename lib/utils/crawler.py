@@ -453,7 +453,7 @@ def crawl(target, post=None, cookie=None):
                 break
 
     except KeyboardInterrupt:
-        warnMsg = "user aborted during crawling. sqlmap "
+        warnMsg = "user aborted during crawling. GenSQL "
         warnMsg += "will use partial list"
         logger.warning(warnMsg)
 

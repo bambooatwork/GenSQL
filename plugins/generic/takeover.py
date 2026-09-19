@@ -139,7 +139,7 @@ class Takeover(Abstraction, Metasploit, ICMPsh, Registry):
             isAdmin = runningAsAdmin()
 
             if not isAdmin:
-                errMsg = "you need to run sqlmap as an administrator "
+                errMsg = "you need to run GenSQL as an administrator "
                 errMsg += "if you want to establish an out-of-band ICMP "
                 errMsg += "tunnel because icmpsh uses raw sockets to "
                 errMsg += "sniff and craft ICMP packets"
@@ -148,7 +148,7 @@ class Takeover(Abstraction, Metasploit, ICMPsh, Registry):
             try:
                 __import__("impacket")
             except ImportError:
-                errMsg = "sqlmap requires 'python-impacket' third-party library "
+                errMsg = "GenSQL requires 'python-impacket' third-party library "
                 errMsg += "in order to run icmpsh master. You can get it at "
                 errMsg += "https://github.com/SecureAuthCorp/impacket"
                 raise SqlmapMissingDependence(errMsg)
@@ -253,7 +253,7 @@ class Takeover(Abstraction, Metasploit, ICMPsh, Registry):
                     # system is not Windows
                     conf.privEsc = False
 
-                    warnMsg = "sqlmap does not implement any operating system "
+                    warnMsg = "GenSQL does not implement any operating system "
                     warnMsg += "user privilege escalation technique when the "
                     warnMsg += "back-end DBMS underlying system is not Windows"
                     logger.warning(warnMsg)
@@ -303,7 +303,7 @@ class Takeover(Abstraction, Metasploit, ICMPsh, Registry):
 
             elif Backend.isDbms(DBMS.MYSQL):
                 debugMsg = "since stacked queries are not supported, "
-                debugMsg += "sqlmap is going to perform the SMB relay "
+                debugMsg += "GenSQL is going to perform the SMB relay "
                 debugMsg += "attack via inference blind SQL injection"
                 logger.debug(debugMsg)
 

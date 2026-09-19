@@ -70,7 +70,7 @@ class Entries(object):
 
         if conf.db is None or conf.db == CURRENT_DB:
             if conf.db is None:
-                warnMsg = "missing database parameter. sqlmap is going "
+                warnMsg = "missing database parameter. GenSQL is going "
                 warnMsg += "to use the current database to enumerate "
                 warnMsg += "table(s) entries"
                 logger.warning(warnMsg)
@@ -624,7 +624,7 @@ class Entries(object):
             errMsg += "back-end DBMS is MySQL < 5.0"
             raise SqlmapUnsupportedFeatureException(errMsg)
 
-        infoMsg = "sqlmap will dump entries of all tables from all databases now"
+        infoMsg = "GenSQL will dump entries of all tables from all databases now"
         logger.info(infoMsg)
 
         conf.tbl = None

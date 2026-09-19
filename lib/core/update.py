@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Copyright (c) 2006-2026 sqlmap developers (https://sqlmap.org)
+Copyright (c) 2006-2026 gensql developers (https://gensql.org)
 See the file 'LICENSE' for copying permission
 """
 
@@ -38,7 +38,7 @@ def update():
     success = False
 
     if TYPE == "pip":
-        infoMsg = "updating sqlmap to the latest stable version from the "
+        infoMsg = "updating gensql to the latest stable version from the "
         infoMsg += "PyPI repository"
         logger.info(infoMsg)
 
@@ -49,7 +49,7 @@ def update():
 
         output = ""
         try:
-            process = subprocess.Popen("pip install -U sqlmap", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=paths.SQLMAP_ROOT_PATH)
+            process = subprocess.Popen("pip install -U gensql", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=paths.GenSQL_ROOT_PATH)
             output, _ = process.communicate()
             success = not process.returncode
         except Exception as ex:
@@ -59,13 +59,13 @@ def update():
             output = getText(output)
 
         if success:
-            logger.info("%s the latest revision '%s'" % ("already at" if "already up-to-date" in output else "updated to", extractRegexResult(r"\binstalled sqlmap-(?P<result>\d+\.\d+\.\d+)", output) or extractRegexResult(r"\((?P<result>\d+\.\d+\.\d+)\)", output)))
+            logger.info("%s the latest revision '%s'" % ("already at" if "already up-to-date" in output else "updated to", extractRegexResult(r"\binstalled gensql-(?P<result>\d+\.\d+\.\d+)", output) or extractRegexResult(r"\((?P<result>\d+\.\d+\.\d+)\)", output)))
         else:
             logger.error("update could not be completed ('%s')" % re.sub(r"[^a-z0-9:/\\]+", " ", output).strip())
 
-    elif not os.path.exists(os.path.join(paths.SQLMAP_ROOT_PATH, ".git")):
-        warnMsg = "not a git repository. It is recommended to clone the 'sqlmapproject/sqlmap' repository "
-        warnMsg += "from GitHub (e.g. 'git clone --depth 1 %s sqlmap')" % GIT_REPOSITORY
+    elif not os.path.exists(os.path.join(paths.GenSQL_ROOT_PATH, ".git")):
+        warnMsg = "not a git repository. It is recommended to clone the 'gensqlproject/gensql' repository "
+        warnMsg += "from GitHub (e.g. 'git clone --depth 1 %s gensql')" % GIT_REPOSITORY
         logger.warning(warnMsg)
 
         if VERSION == getLatestRevision():
@@ -74,15 +74,15 @@ def update():
 
         message = "do you want to try to fetch the latest 'zipball' from repository and extract it (experimental) ? [y/N]"
         if readInput(message, default='N', boolean=True):
-            directory = os.path.abspath(paths.SQLMAP_ROOT_PATH)
+            directory = os.path.abspath(paths.GenSQL_ROOT_PATH)
 
             try:
-                open(os.path.join(directory, "sqlmap.py"), "w+b")
+                open(os.path.join(directory, "gensql.py"), "w+b")
             except Exception as ex:
                 errMsg = "unable to update content of directory '%s' ('%s')" % (directory, getSafeExString(ex))
                 logger.error(errMsg)
             else:
-                attrs = os.stat(os.path.join(directory, "sqlmap.py")).st_mode
+                attrs = os.stat(os.path.join(directory, "gensql.py")).st_mode
                 for wildcard in ('*', ".*"):
                     for _ in glob.glob(os.path.join(directory, wildcard)):
                         try:
@@ -102,11 +102,11 @@ def update():
 
                         with zipfile.ZipFile(archive) as f:
                             for info in f.infolist():
-                                info.filename = re.sub(r"\Asqlmap[^/]+", "", info.filename)
+                                info.filename = re.sub(r"\Agensql[^/]+", "", info.filename)
                                 if info.filename:
                                     f.extract(info, directory)
 
-                        filepath = os.path.join(paths.SQLMAP_ROOT_PATH, "lib", "core", "settings.py")
+                        filepath = os.path.join(paths.GenSQL_ROOT_PATH, "lib", "core", "settings.py")
                         if os.path.isfile(filepath):
                             with openFile(filepath, "r") as f:
                                 version = re.search(r"(?m)^VERSION\s*=\s*['\"]([^'\"]+)", f.read()).group(1)
@@ -119,12 +119,12 @@ def update():
                             logger.error("update could not be completed")
                         else:
                             try:
-                                os.chmod(os.path.join(directory, "sqlmap.py"), attrs)
+                                os.chmod(os.path.join(directory, "gensql.py"), attrs)
                             except OSError:
-                                logger.warning("could not set the file attributes of '%s'" % os.path.join(directory, "sqlmap.py"))
+                                logger.warning("could not set the file attributes of '%s'" % os.path.join(directory, "gensql.py"))
 
     else:
-        infoMsg = "updating sqlmap to the latest development revision from the "
+        infoMsg = "updating gensql to the latest development revision from the "
         infoMsg += "GitHub repository"
         logger.info(infoMsg)
 
@@ -135,7 +135,7 @@ def update():
 
         output = ""
         try:
-            process = subprocess.Popen("git checkout . && git pull %s HEAD" % GIT_REPOSITORY, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=paths.SQLMAP_ROOT_PATH)
+            process = subprocess.Popen("git checkout . && git pull %s HEAD" % GIT_REPOSITORY, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=paths.GenSQL_ROOT_PATH)
             output, _ = process.communicate()
             success = not process.returncode
         except Exception as ex:
@@ -148,8 +148,8 @@ def update():
             logger.info("%s the latest revision '%s'" % ("already at" if "Already" in output else "updated to", getRevisionNumber()))
         else:
             if "Not a git repository" in output:
-                errMsg = "not a valid git repository. Please checkout the 'sqlmapproject/sqlmap' repository "
-                errMsg += "from GitHub (e.g. 'git clone --depth 1 %s sqlmap')" % GIT_REPOSITORY
+                errMsg = "not a valid git repository. Please checkout the 'gensqlproject/gensql' repository "
+                errMsg += "from GitHub (e.g. 'git clone --depth 1 %s gensql')" % GIT_REPOSITORY
                 logger.error(errMsg)
             else:
                 logger.error("update could not be completed ('%s')" % re.sub(r"\W+", " ", output).strip())
@@ -160,7 +160,7 @@ def update():
             infoMsg += "to use a GitHub for Windows client for updating "
             infoMsg += "purposes (https://desktop.github.com/) or just "
             infoMsg += "download the latest snapshot from "
-            infoMsg += "https://github.com/sqlmapproject/sqlmap/releases"
+            infoMsg += "https://github.com/gensqlproject/gensql/releases"
         else:
             infoMsg = "for Linux platform it's recommended "
             infoMsg += "to install a standard 'git' package (e.g.: 'apt install git')"

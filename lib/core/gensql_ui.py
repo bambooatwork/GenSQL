@@ -371,7 +371,7 @@ def install(verbose=False):
     except Exception:
         pass
 
-    # Patch dataToStdout to rewrite sqlmap branding from any remaining direct output
+    # Patch dataToStdout to rewrite GenSQL branding from any remaining direct output
     try:
         import lib.core.common as _common
         _orig_dataToStdout = _common.dataToStdout
@@ -386,11 +386,20 @@ def install(verbose=False):
                     lambda m: _convert_sqlmap_log(m.group(1), m.group(2)),
                     data
                 )
-            return _orig_dataToStdout(data, forceOutput=forceOutput, bold=bold, level=level, **kw)
+            # Call original — it does NOT accept 'level', so drop it
+            # Also drop any other unknown kwargs to avoid breaking on future changes
+            try:
+                return _orig_dataToStdout(data, forceOutput=forceOutput, bold=bold)
+            except TypeError:
+                try:
+                    return _orig_dataToStdout(data, forceOutput=forceOutput)
+                except TypeError:
+                    return _orig_dataToStdout(data)
 
         _common.dataToStdout = _patched_dataToStdout
     except Exception:
         pass
+
 
 
 def _convert_sqlmap_log(ts_str, level_str):

@@ -271,7 +271,7 @@ def _setMultipleTargets():
     updatedTargetsCount = len(kb.targets)
 
     if updatedTargetsCount > initialTargetsCount:
-        infoMsg = "sqlmap parsed %d " % (updatedTargetsCount - initialTargetsCount)
+        infoMsg = "GenSQL parsed %d " % (updatedTargetsCount - initialTargetsCount)
         infoMsg += "(parameter unique) requests from the "
         infoMsg += "targets list ready to be tested"
         logger.info(infoMsg)
@@ -651,7 +651,7 @@ def _setMetasploit():
         try:
             __import__("win32file")
         except ImportError:
-            errMsg = "sqlmap requires third-party module 'pywin32' "
+            errMsg = "GenSQL requires third-party module 'pywin32' "
             errMsg += "in order to use Metasploit functionalities on "
             errMsg += "Windows. You can download it from "
             errMsg += "'https://github.com/mhammond/pywin32'"
@@ -667,7 +667,7 @@ def _setMetasploit():
         isAdmin = runningAsAdmin()
 
         if not isAdmin:
-            errMsg = "you need to run sqlmap as an administrator "
+            errMsg = "you need to run GenSQL as an administrator "
             errMsg += "if you want to perform a SMB relay attack because "
             errMsg += "it will need to listen on a user-specified SMB "
             errMsg += "TCP port for incoming connection attempts"
@@ -705,7 +705,7 @@ def _setMetasploit():
         logger.warning(warnMsg)
 
     if not msfEnvPathExists:
-        warnMsg = "sqlmap is going to look for Metasploit Framework "
+        warnMsg = "GenSQL is going to look for Metasploit Framework "
         warnMsg += "installation inside the environment path(s)"
         logger.warning(warnMsg)
 
@@ -768,7 +768,7 @@ def _setOS():
         errMsg += "system. The supported DBMS operating systems for OS "
         errMsg += "and file system access are %s. " % ', '.join([o.capitalize() for o in SUPPORTED_OS])
         errMsg += "If you do not know the back-end DBMS underlying OS, "
-        errMsg += "do not provide it and sqlmap will fingerprint it for "
+        errMsg += "do not provide it and GenSQL will fingerprint it for "
         errMsg += "you."
         raise SqlmapUnsupportedDBMSException(errMsg)
 
@@ -821,7 +821,7 @@ def _setDBMS():
         errMsg = "you provided an unsupported back-end database management "
         errMsg += "system. Supported DBMSes are as follows: %s. " % ', '.join(sorted((_ for _ in (list(DBMS_DICT) + getPublicTypeMembers(FORK, True))), key=str.lower))
         errMsg += "If you do not know the back-end DBMS, do not provide "
-        errMsg += "it and sqlmap will fingerprint it for you."
+        errMsg += "it and GenSQL will fingerprint it for you."
         raise SqlmapUnsupportedDBMSException(errMsg)
 
     for dbms, aliases in DBMS_ALIASES:
@@ -1592,7 +1592,7 @@ def _setHTTPUserAgent():
     Set the HTTP User-Agent header.
     Depending on the user options it can be:
 
-        * The default sqlmap string
+        * The default GenSQL string
         * A default value read as user option
         * A random value read from a list of User-Agent headers from a
           file choosed as user option
@@ -1606,7 +1606,7 @@ def _setHTTPUserAgent():
             _ = random.sample([_[1] for _ in getPublicTypeMembers(MOBILES, True)], 1)[0]
             conf.httpHeaders.append((HTTP_HEADER.USER_AGENT, _))
         else:
-            message = "which smartphone do you want sqlmap to imitate "
+            message = "which smartphone do you want GenSQL to imitate "
             message += "through HTTP User-Agent header?\n"
             items = sorted(getPublicTypeMembers(MOBILES, True))
 
@@ -1704,7 +1704,7 @@ def _setHTTPTimeout():
         conf.timeout = float(conf.timeout)
 
         if conf.timeout < 3.0:
-            warnMsg = "the minimum HTTP timeout is 3 seconds, sqlmap "
+            warnMsg = "the minimum HTTP timeout is 3 seconds, GenSQL "
             warnMsg += "will going to reset it"
             logger.warning(warnMsg)
 
@@ -1727,14 +1727,14 @@ def _checkDependencies():
 
 def _createHomeDirectories():
     """
-    Creates directories inside sqlmap's home directory
+    Creates directories inside GenSQL's home directory
     """
 
     if conf.get("purge"):
         return
 
     for context in ("output", "history"):
-        directory = paths["SQLMAP_%s_PATH" % getUnicode(context).upper()]   # NOTE: https://github.com/sqlmapproject/sqlmap/issues/4363
+        directory = paths["SQLMAP_%s_PATH" % getUnicode(context).upper()]   # GenSQL internal path resolution
         try:
             if not os.path.isdir(directory):
                 os.makedirs(directory)
@@ -1747,7 +1747,7 @@ def _createHomeDirectories():
                 warnMsg = "using '%s' as the %s directory" % (directory, context)
                 logger.warning(warnMsg)
         except (OSError, IOError) as ex:
-            tempDir = tempfile.mkdtemp(prefix="sqlmap%s" % context)
+            tempDir = tempfile.mkdtemp(prefix="gensql%s" % context)
             warnMsg = "unable to %s %s directory " % ("create" if not os.path.isdir(directory) else "write to the", context)
             warnMsg += "'%s' (%s). " % (directory, getUnicode(ex))
             warnMsg += "Using temporary directory '%s' instead" % getUnicode(tempDir)
@@ -1793,9 +1793,9 @@ def _createTemporaryDirectory():
             warnMsg += "writable by the current user"
             logger.warning(warnMsg)
 
-    if "sqlmap" not in (tempfile.tempdir or "") or conf.tmpDir and tempfile.tempdir == conf.tmpDir:
+    if "gensql" not in (tempfile.tempdir or "") or conf.tmpDir and tempfile.tempdir == conf.tmpDir:
         try:
-            tempfile.tempdir = tempfile.mkdtemp(prefix="sqlmap", suffix=str(os.getpid()))
+            tempfile.tempdir = tempfile.mkdtemp(prefix="gensql", suffix=str(os.getpid()))
         except:
             tempfile.tempdir = os.path.join(paths.SQLMAP_HOME_PATH, "tmp", "sqlmap%s%d" % (randomStr(6), os.getpid()))
 
@@ -2113,7 +2113,7 @@ def _cleanupEnvironment():
 
 def _purge():
     """
-    Safely removes (purges) sqlmap data directory.
+    Safely removes (purges) GenSQL data directory.
     """
 
     if conf.purge:
@@ -2473,26 +2473,26 @@ def _useWizardInterface():
             for _ in options:
                 conf.__setitem__(_, True)
 
-    logger.debug("muting sqlmap.. it will do the magic for you")
+    logger.debug("GenSQL engine initializing...")
     conf.verbose = 0
 
     conf.batch = True
     conf.threads = 4
 
-    dataToStdout("\nsqlmap is running, please wait..\n\n")
+    dataToStdout("\nGenSQL scan in progress...\n\n")
 
     kb.wizardMode = True
 
 def _saveConfig():
     """
-    Saves the command line options to a sqlmap configuration INI file
+    Saves command line options to a GenSQL configuration file
     Format.
     """
 
     if not conf.saveConfig:
         return
 
-    debugMsg = "saving command line options to a sqlmap configuration INI file"
+    debugMsg = "saving options to GenSQL configuration file"
     logger.debug(debugMsg)
 
     saveConfig(conf, conf.saveConfig)
@@ -2502,7 +2502,7 @@ def _saveConfig():
 
 def setVerbosity():
     """
-    This function set the verbosity of sqlmap output messages.
+    Set GenSQL output verbosity level.
     """
 
     if conf.verbose is None:
@@ -2668,7 +2668,7 @@ def _setDNSServer():
             errMsg += "DNS server instance ('%s')" % getSafeExString(ex)
             raise SqlmapGenericException(errMsg)
     else:
-        errMsg = "you need to run sqlmap as an administrator "
+        errMsg = "you need to run GenSQL as an administrator "
         errMsg += "if you want to perform a DNS data exfiltration attack "
         errMsg += "as it will need to listen on privileged UDP port 53 "
         errMsg += "for incoming address resolution attempts"
@@ -2848,18 +2848,18 @@ def _basicOptionValidation():
         errMsg = "switch '--dump' is incompatible with switch '--search'"
         raise SqlmapSyntaxException(errMsg)
 
-    if conf.alert and os.environ.get("SQLMAP_UNSAFE_ALERT") != '1':
+    if conf.alert and os.environ.get("GENSQL_UNSAFE_ALERT") != '1':
         errMsg = "for security reasons, to prevent execution of potentially malicious "
         errMsg += "OS commands via configuration files or copy-paste attacks, "
         errMsg += "the '--alert' option requires the environment variable "
-        errMsg += "'SQLMAP_UNSAFE_ALERT=1' to be explicitly set"
+        errMsg += "'GENSQL_UNSAFE_ALERT=1' to be explicitly set"
         raise SqlmapSystemException(errMsg)
 
-    if conf.evalCode and os.environ.get("SQLMAP_UNSAFE_EVAL") != '1':
+    if conf.evalCode and os.environ.get("GENSQL_UNSAFE_EVAL") != '1':
         errMsg = "for security reasons, to prevent execution of potentially malicious "
         errMsg += "Python code via configuration files or copy-paste attacks, "
         errMsg += "the '--eval' option requires the environment variable "
-        errMsg += "'SQLMAP_UNSAFE_EVAL=1' to be explicitly set"
+        errMsg += "'GENSQL_UNSAFE_EVAL=1' to be explicitly set"
         raise SqlmapSystemException(errMsg)
 
     if conf.chunked and not any((conf.data, conf.requestFile, conf.forms, conf.openApiFile)):

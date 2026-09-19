@@ -1081,7 +1081,7 @@ def cmdLineParser(argv=None):
                 elif command[0] != '-':
                     if not re.search(r"(?i)\A(\?|help)\Z", command):
                         dataToStdout("[!] invalid option(s) provided\n")
-                    dataToStdout("[i] valid example: '-u http://www.site.com/vuln.php?id=1 --banner'\n")
+                    dataToStdout("[i] valid example: '-t https://site.com/page?id=1 --level 3'\n")
                 else:
                     saveHistory(AUTOCOMPLETE_TYPE.SQLMAP)
                     loadHistory(AUTOCOMPLETE_TYPE.SQLMAP)

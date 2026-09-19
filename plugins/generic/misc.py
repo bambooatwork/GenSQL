@@ -38,7 +38,7 @@ class Miscellaneous(object):
     def getRemoteTempPath(self):
         if not conf.tmpPath and Backend.isDbms(DBMS.MSSQL):
             debugMsg = "identifying Microsoft SQL Server error log directory "
-            debugMsg += "that sqlmap will use to store temporary files with "
+            debugMsg += "that GenSQL will use to store temporary files with "
             debugMsg += "commands' output"
             logger.debug(debugMsg)
 
@@ -186,7 +186,7 @@ class Miscellaneous(object):
             logger.warning(warnMsg)
 
     def likeOrExact(self, what):
-        message = "do you want sqlmap to consider provided %s(s):\n" % what
+        message = "do you want GenSQL to consider provided %s(s):\n" % what
         message += "[1] as LIKE %s names (default)\n" % what
         message += "[2] as exact %s names" % what
 

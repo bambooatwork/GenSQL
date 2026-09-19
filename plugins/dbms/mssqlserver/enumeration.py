@@ -37,7 +37,7 @@ from thirdparty import six
 class Enumeration(GenericEnumeration):
     def getPrivileges(self, *args, **kwargs):
         warnMsg = "on Microsoft SQL Server it is not possible to fetch "
-        warnMsg += "database users privileges, sqlmap will check whether "
+        warnMsg += "database users privileges, GenSQL will check whether "
         warnMsg += "or not the database users are database administrators"
         logger.warning(warnMsg)
 

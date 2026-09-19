@@ -1064,7 +1064,7 @@ def checkFilteredChars(injection):
         if not checkBooleanExpression("(%d)=%d" % (randInt, randInt)):
             warnMsg = "it appears that some non-alphanumeric characters (i.e. ()) are "
             warnMsg += "filtered by the back-end server. There is a strong "
-            warnMsg += "possibility that sqlmap won't be able to properly "
+            warnMsg += "possibility that GenSQL won't be able to properly "
             warnMsg += "exploit this vulnerability"
             logger.warning(warnMsg)
 
@@ -1098,7 +1098,7 @@ def checkFilteredChars(injection):
 
             if adapted:
                 infoMsg = "the character '>' appears to be filtered by the back-end server; "
-                infoMsg += "sqlmap automatically applied the '%s' tamper script to adapt" % adapted
+                infoMsg += "GenSQL automatically applied the '%s' tamper script to adapt" % adapted
                 logger.info(infoMsg)
             else:
                 warnMsg = "it appears that the character '>' is "
@@ -1429,7 +1429,7 @@ def checkDynamicContent(firstPage, secondPage):
                         logger.debug(debugMsg)
                         kb.nullConnection = None
 
-                    infoMsg = "target URL content is not byte-stable but structurally stable; sqlmap "
+                    infoMsg = "target URL content is not byte-stable but structurally stable; GenSQL "
                     infoMsg += "will base the page comparison on the page structure"
                     logger.info(infoMsg)
                     return
@@ -1442,7 +1442,7 @@ def checkDynamicContent(firstPage, secondPage):
                 return
 
             warnMsg = "target URL content appears to be heavily dynamic. "
-            warnMsg += "sqlmap is going to retry the request(s)"
+            warnMsg += "GenSQL is going to retry the request(s)"
             singleTimeLogMessage(warnMsg, logging.CRITICAL)
 
             kb.heavilyDynamic = True
@@ -1489,7 +1489,7 @@ def checkStability():
             logger.error(errMsg)
 
     else:
-        warnMsg = "target URL content is not stable (i.e. content differs). sqlmap will base the page "
+        warnMsg = "target URL content is not stable. GenSQL will base the page "
         warnMsg += "comparison on a sequence matcher. If no dynamic nor "
         warnMsg += "injectable parameters are detected, or in case of "
         warnMsg += "junk results, refer to user's manual paragraph "
@@ -1622,7 +1622,7 @@ def checkWaf():
             raise SqlmapUserQuitException
         else:
             if not conf.tamper and not kb.tamperFunctions:
-                message = "do you want sqlmap to try to automatically bypass the WAF/IPS during "
+                message = "do you want GenSQL to try to automatically bypass the WAF/IPS during "
                 message += "the run (e.g. by using a non-scanner User-Agent and tamper script(s))? [Y/n] "
                 kb.wafBypass = readInput(message, default='Y', boolean=True)
                 hashDBWrite(HASHDB_KEYS.CHECK_WAF_BYPASS, kb.wafBypass, True)
@@ -1784,7 +1784,7 @@ def checkConnection(suppressOutput=False):
             if conf.string not in rawResponse:
                 warnMsg = "you provided '%s' as the string to " % conf.string
                 warnMsg += "match, but such a string is not within the target "
-                warnMsg += "URL raw response, sqlmap will carry on anyway"
+                warnMsg += "URL raw response, GenSQL will carry on anyway"
                 logger.warning(warnMsg)
 
         if conf.regexp:
@@ -1794,7 +1794,7 @@ def checkConnection(suppressOutput=False):
 
             if not re.search(conf.regexp, rawResponse, re.I | re.M):
                 warnMsg = "you provided '%s' as the regular expression " % conf.regexp
-                warnMsg += "which does not have any match within the target URL raw response. sqlmap "
+                warnMsg += "which does not have any match within the target URL raw response. GenSQL "
                 warnMsg += "will carry on anyway"
                 logger.warning(warnMsg)
 
@@ -1832,7 +1832,7 @@ def checkConnection(suppressOutput=False):
             warnMsg = "check connection to a provided "
             warnMsg += "IPv6 address with a tool like ping6 "
             warnMsg += "(e.g. 'ping6 -I eth0 %s') " % conf.hostname
-            warnMsg += "prior to running sqlmap to avoid "
+            warnMsg += "prior to running GenSQL to avoid "
             warnMsg += "any addressing issues"
             singleTimeWarnMessage(warnMsg)
 

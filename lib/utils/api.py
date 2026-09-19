@@ -210,7 +210,7 @@ def _sanitizeScanData(content_type, value):
                 # clean the identifier, drop the per-column display 'length', keep just the values list
                 values = cell.get("values") if isinstance(cell, dict) else cell
                 if isinstance(values, (list, tuple)):
-                    # sqlmap represents a DB NULL as a single space (DUMP_REPLACEMENTS); surface it as
+                    # GenSQL represents a DB NULL as a single space (DUMP_REPLACEMENTS); surface it as
                     # JSON null. An empty string "" is a genuine empty value and is left as-is.
                     values = [None if _ == " " else _ for _ in values]
                 result["columns"][_cleanIdentifier(column)] = values
@@ -270,7 +270,7 @@ def writeReportJson(collector, filepath):
     result = _assembleData(collector, REPORT_TASKID)
     result["meta"] = {
         "api_version": int(RESTAPI_VERSION.split(".")[0]),   # MAJOR only - the part that matters for client compatibility
-        "sqlmap_version": VERSION_STRING,
+        "gensql_version": VERSION_STRING,
         "url": conf.get("url"),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -345,7 +345,7 @@ class Task(object):
                 type_ = unArrayizeValue(type_)
                 self.options[name] = _defaults.get(name, datatype[type_])
 
-        # Let sqlmap engine knows it is getting called by the API,
+        # Let GenSQL engine know it is getting called by the API,
         # the task ID and the file path of the IPC database
         self.options.api = True
         self.options.taskid = taskid
@@ -375,14 +375,14 @@ class Task(object):
         os.close(handle)
         saveConfig(self.options, configFile)
 
-        if os.path.exists("sqlmap.py"):
-            self.process = Popen([sys.executable or "python", "sqlmap.py", "--api", "-c", configFile], shell=False, close_fds=not IS_WIN)
-        elif os.path.exists(os.path.join(os.getcwd(), "sqlmap.py")):
-            self.process = Popen([sys.executable or "python", "sqlmap.py", "--api", "-c", configFile], shell=False, cwd=os.getcwd(), close_fds=not IS_WIN)
+        if os.path.exists("gensql.py"):
+            self.process = Popen([sys.executable or "python", "gensql.py", "--api", "-c", configFile], shell=False, close_fds=not IS_WIN)
+        elif os.path.exists(os.path.join(os.getcwd(), "gensql.py")):
+            self.process = Popen([sys.executable or "python", "gensql.py", "--api", "-c", configFile], shell=False, cwd=os.getcwd(), close_fds=not IS_WIN)
         elif os.path.exists(os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), "sqlmap.py")):
-            self.process = Popen([sys.executable or "python", "sqlmap.py", "--api", "-c", configFile], shell=False, cwd=os.path.join(os.path.abspath(os.path.dirname(sys.argv[0]))), close_fds=not IS_WIN)
+            self.process = Popen([sys.executable or "python", "gensql.py", "--api", "-c", configFile], shell=False, cwd=os.path.join(os.path.abspath(os.path.dirname(sys.argv[0]))), close_fds=not IS_WIN)
         else:
-            self.process = Popen(["sqlmap", "--api", "-c", configFile], shell=False, close_fds=not IS_WIN)
+            self.process = Popen(["gensql", "--api", "-c", configFile], shell=False, close_fds=not IS_WIN)
 
     def engine_stop(self):
         if self.process:
@@ -419,7 +419,7 @@ class Task(object):
     def engine_has_terminated(self):
         return isinstance(self.engine_get_returncode(), int)
 
-# Wrapper functions for sqlmap engine
+# Wrapper functions for GenSQL engine
 class StdDbOut(object):
     def __init__(self, taskid, messagetype="stdout"):
         # Overwrite system standard output and standard error to write
@@ -646,7 +646,7 @@ def task_flush(token=None):
     return jsonize({"success": True})
 
 ##################################
-# sqlmap core interact functions #
+# GenSQL core interaction functions #
 ##################################
 
 # Handle task's options
@@ -732,11 +732,11 @@ def scan_start(taskid):
     if message:
         return jsonize({"success": False, "message": message})
 
-    # Initialize sqlmap engine's options with user's provided options, if any
+    # Initialize GenSQL engine's options with user's provided options, if any
     for option, value in request.json.items():
         DataStore.tasks[taskid].set_option(option, value)
 
-    # Launch sqlmap engine in a separate process
+    # Launch GenSQL engine in a separate process
     DataStore.tasks[taskid].engine_start()
 
     logger.debug("(%s) Started scan" % taskid)
@@ -1049,7 +1049,7 @@ def client(host=RESTAPI_DEFAULT_ADDRESS, port=RESTAPI_DEFAULT_PORT, username=Non
                 continue
 
             try:
-                argv = ["sqlmap.py"] + shlex.split(command)[1:]
+                argv = ["gensql.py"] + shlex.split(command)[1:]
             except Exception as ex:
                 logger.error("Error occurred while parsing arguments ('%s')" % getSafeExString(ex))
                 taskid = None

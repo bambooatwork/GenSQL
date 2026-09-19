@@ -27,5 +27,5 @@ def profile(profileOutputFile=None):
     from lib.controller.controller import start
     cProfile.runctx("start()", {"start": start}, {}, profileOutputFile)
 
-    infoMsg = "execution profiled and stored into file '%s' (e.g. 'gprof2dot -f pstats %s | dot -Tpng -o /tmp/sqlmap_profile.png')" % (profileOutputFile, profileOutputFile)
+    infoMsg = "execution profiled and stored into file '%s' (e.g. 'gprof2dot -f pstats %s | dot -Tpng -o /tmp/GenSQL_profile.png')" % (profileOutputFile, profileOutputFile)
     logger.info(infoMsg)

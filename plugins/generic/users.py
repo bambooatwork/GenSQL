@@ -673,7 +673,7 @@ class Users(object):
 
     def getRoles(self, query2=False):
         warnMsg = "enumeration of roles is not supported on %s; " % Backend.getIdentifiedDbms()
-        warnMsg += "sqlmap will enumerate privileges instead"
+        warnMsg += "GenSQL will enumerate privileges instead"
         logger.warning(warnMsg)
 
         return self.getPrivileges(query2)

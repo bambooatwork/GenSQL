@@ -122,14 +122,14 @@ def checkEnvironment():
         os.path.isdir(modulePath())
     except UnicodeEncodeError:
         errMsg = "your system does not properly handle non-ASCII paths. "
-        errMsg += "Please move the sqlmap's directory to the other location"
+        errMsg += "Please move the GenSQL directory to the other location"
         logger.critical(errMsg)
         raise SystemExit
 
     if LooseVersion(VERSION) < LooseVersion("1.0"):
         errMsg = "your runtime environment (e.g. PYTHONPATH) is "
         errMsg += "broken. Please make sure that you are not running "
-        errMsg += "newer versions of sqlmap with runtime scripts for older "
+        errMsg += "newer versions of GenSQL with runtime scripts for older "
         errMsg += "versions"
         logger.critical(errMsg)
         raise SystemExit
@@ -143,10 +143,10 @@ def checkEnvironment():
         _ = os.path.dirname(_)
 
     if repackaged:
-        errMsg = "this sqlmap instance appears to be running from inside a third-party "
-        errMsg += "repackage. sqlmap is free and open source under the GPL (https://sqlmap.org). "
+        errMsg = "GenSQL appears to be running from inside a third-party package "
+        errMsg += "GenSQL is free and open source. "
         errMsg += "embedding it into proprietary or paid software requires a separate commercial "
-        errMsg += "license (sales@sqlmap.org)"
+        errMsg += "contact: jeevraj@gensql.dev"
         logger.critical(errMsg)
         raise SystemExit
 
@@ -417,7 +417,7 @@ def main():
             raise SystemExit
 
         elif any(_ in excMsg for _ in ("AttributeError:", "TypeError:")) and re.search(r"3\.11\.\d+a", sys.version):
-            errMsg = "there is a known issue when sqlmap is run with ALPHA versions of Python 3.11. "
+            errMsg = "there is a known issue with ALPHA versions of Python 3.11. "
             errMsg += "Please download a stable Python version"
             logger.critical(errMsg)
             raise SystemExit
@@ -454,7 +454,7 @@ def main():
 
         elif "'WebSocket' object has no attribute 'status'" in excMsg:
             errMsg = "wrong websocket library detected"
-            errMsg += " (Reference: 'https://github.com/sqlmapproject/sqlmap/issues/4572#issuecomment-775041086')"
+            errMsg += " (Reference: 'https://github.com/bambooatwork/GenSQL')"
             logger.critical(errMsg)
             raise SystemExit
 
@@ -465,7 +465,7 @@ def main():
             raise SystemExit
 
         elif any(_ in excMsg for _ in ("unable to access item 'liveTest'",)):
-            errMsg = "detected usage of files from different versions of sqlmap"
+            errMsg = "detected usage of files from different versions of GenSQL"
             logger.critical(errMsg)
             raise SystemExit
 
@@ -586,7 +586,7 @@ def main():
         kb.threadContinue = False
 
         if (getDaysFromLastUpdate() or 0) > LAST_UPDATE_NAGGING_DAYS:
-            warnMsg = "your sqlmap version is outdated"
+            warnMsg = "your GenSQL version is outdated"
             logger.warning(warnMsg)
 
         # emit the JSON report BEFORE the closing banner, so it does not appear awkwardly after

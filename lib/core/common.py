@@ -678,17 +678,17 @@ def paramToDict(place, parameters=None):
                         warnMsg += "('%s') with most likely leftover " % element
                         warnMsg += "chars/statements from manual SQL injection test(s). "
                         warnMsg += "Please, always use only valid parameter values "
-                        warnMsg += "so sqlmap could be able to run properly"
+                        warnMsg += "so GenSQL could run properly"
                         logger.warning(warnMsg)
 
-                        message = "are you really sure that you want to continue (sqlmap could have problems)? [y/N] "
+                        message = "are you really sure that you want to continue (GenSQL could have problems)? [y/N] "
 
                         if not readInput(message, default='N', boolean=True):
                             raise SqlmapSilentQuitException
                     elif not _:
                         warnMsg = "provided value for parameter '%s' is empty. " % parameter
                         warnMsg += "Please, always use only valid parameter values "
-                        warnMsg += "so sqlmap could be able to run properly"
+                        warnMsg += "so GenSQL could run properly"
                         logger.warning(warnMsg)
 
                 if place in (PLACE.POST, PLACE.GET):
@@ -1332,7 +1332,7 @@ def getHeader(headers, key):
 
 def checkPipedInput():
     """
-    Checks whether input to program has been provided via standard input (e.g. cat /tmp/req.txt | python sqlmap.py -r -)
+    Checks whether input has been provided via standard input (e.g. cat /tmp/req.txt | python gensql.py -r -)
     # Reference: https://stackoverflow.com/a/33873570
     """
 
@@ -1405,7 +1405,7 @@ def checkFile(filename, raiseOnError=True):
 
 def banner():
     """
-    This function prints sqlmap banner with its version
+    Prints the GenSQL banner with version info
     """
 
     if not any(_ in sys.argv for _ in ("--version", "--api")) and not conf.get("disableBanner"):
@@ -1767,7 +1767,7 @@ def parseTargetDirect():
                 elif dbmsName in DBWIRE_MODULES:  # our dependency-free pure-python 'dbwire' client covers this DBMS
                     pass
                 else:
-                    errMsg = "sqlmap requires '%s' third-party library " % data[1]
+                    errMsg = "GenSQL requires '%s' third-party library " % data[1]
                     errMsg += "in order to directly connect to the DBMS "
                     errMsg += "'%s'. You can download it from '%s'" % (dbmsName, data[2])
                     errMsg += ". Alternative is to use a package 'python-sqlalchemy' "
@@ -1914,7 +1914,7 @@ def escapeJsonValue(value):
 def expandAsteriskForColumns(expression):
     """
     If the user provided an asterisk rather than the column(s)
-    name, sqlmap will retrieve the columns itself and reprocess
+    name, GenSQL will retrieve the columns itself and reprocess
     the SQL query string (expression)
     """
 
@@ -1924,7 +1924,7 @@ def expandAsteriskForColumns(expression):
 
     if match:
         infoMsg = "you did not provide the fields in your query. "
-        infoMsg += "sqlmap will retrieve the column names itself"
+        infoMsg += "GenSQL will retrieve the column names"
         logger.info(infoMsg)
 
         _ = match.group(2).replace("..", '.').replace(".dbo.", '.')
@@ -2944,7 +2944,7 @@ def wasLastResponseDelayed():
 
         if not kb.testMode and retVal:
             if kb.adjustTimeDelay is None:
-                msg = "do you want sqlmap to try to optimize value(s) "
+                msg = "do you want GenSQL to try to optimize value(s) "
                 msg += "for DBMS delay responses (option '--time-sec')? [Y/n] "
 
                 kb.adjustTimeDelay = ADJUST_TIME_DELAY.DISABLE if not readInput(msg, default='Y', boolean=True) else ADJUST_TIME_DELAY.YES
@@ -3182,9 +3182,9 @@ def runningAsAdmin():
 
         isAdmin = isinstance(_, (float, six.integer_types)) and _ == 1
     else:
-        errMsg = "sqlmap is not able to check if you are running it "
+        errMsg = "GenSQL is not able to check if you are running it "
         errMsg += "as an administrator account on this platform. "
-        errMsg += "sqlmap will assume that you are an administrator "
+        errMsg += "GenSQL will assume that you are an administrator "
         errMsg += "which is mandatory for the requested takeover attack "
         errMsg += "to work properly"
         logger.error(errMsg)
@@ -4089,7 +4089,7 @@ def unhandledExceptionMessage():
     errMsg += "Running version: %s\n" % VERSION_STRING[VERSION_STRING.find('/') + 1:]
     errMsg += "Python version: %s\n" % PYVERSION
     errMsg += "Operating system: %s\n" % platform.platform()
-    errMsg += "Command line: %s\n" % re.sub(r".+?\bsqlmap\.py\b", "sqlmap.py", getUnicode(" ".join(sys.argv), encoding=getattr(sys.stdin, "encoding", None)))
+    errMsg += "Command line: %s\n" % re.sub(r".+?\bgensql\.py\b", "gensql.py", getUnicode(" ".join(sys.argv), encoding=getattr(sys.stdin, "encoding", None)))
     errMsg += "Technique: %s\n" % (enumValueToNameLookup(PAYLOAD.TECHNIQUE, getTechnique()) if getTechnique() is not None else ("DIRECT" if conf.get("direct") else None))
     errMsg += "Back-end DBMS:"
 
@@ -4110,7 +4110,7 @@ def getLatestRevision():
     """
 
     retVal = None
-    req = _urllib.request.Request(url="https://raw.githubusercontent.com/sqlmapproject/sqlmap/master/lib/core/settings.py", headers={HTTP_HEADER.USER_AGENT: fetchRandomAgent()})
+    req = _urllib.request.Request(url="https://raw.githubusercontent.com/bambooatwork/GenSQL/main/lib/core/settings.py", headers={HTTP_HEADER.USER_AGENT: fetchRandomAgent()})
 
     try:
         content = getUnicode(_urllib.request.urlopen(req).read())
@@ -4197,7 +4197,7 @@ def createGithubIssue(errMsg, excMsg):
 
         data = {"title": "Unhandled exception (#%s)" % key, "body": "```%s\n```\n```\n%s```" % (errMsg, excMsg)}
         token = getText(zlib.decompress(decodeBase64(GITHUB_REPORT_PAT_TOKEN[::-1], binary=True))[0::2][::-1])
-        req = _urllib.request.Request(url="https://api.github.com/repos/sqlmapproject/sqlmap/issues", data=getBytes(json.dumps(data)), headers={HTTP_HEADER.AUTHORIZATION: "token %s" % token, HTTP_HEADER.USER_AGENT: fetchRandomAgent()})
+        req = _urllib.request.Request(url="https://api.github.com/repos/bambooatwork/GenSQL/issues", data=getBytes(json.dumps(data)), headers={HTTP_HEADER.AUTHORIZATION: "token %s" % token, HTTP_HEADER.USER_AGENT: fetchRandomAgent()})
 
         try:
             content = getText(_urllib.request.urlopen(req).read())
@@ -4205,7 +4205,7 @@ def createGithubIssue(errMsg, excMsg):
             content = None
             _excMsg = getSafeExString(ex)
 
-        issueUrl = re.search(r"https://github.com/sqlmapproject/sqlmap/issues/\d+", content or "")
+        issueUrl = re.search(r"https://github.com/bambooatwork/GenSQL/issues/\d+", content or "")
         if issueUrl:
             infoMsg = "created Github issue can been found at the address '%s'" % issueUrl.group(0)
             logger.info(infoMsg)
@@ -4227,9 +4227,9 @@ def maskSensitiveData(msg):
     """
     Masks sensitive data in the supplied message
 
-    >>> maskSensitiveData('python sqlmap.py -u "http://www.test.com/vuln.php?id=1" --banner') == 'python sqlmap.py -u *********************************** --banner'
+    >>> maskSensitiveData('python gensql.py -u "http://www.test.com/vuln.php?id=1" --banner') == 'python gensql.py -u *********************************** --banner'
     True
-    >>> maskSensitiveData('sqlmap.py -u test.com/index.go?id=index --auth-type=basic --auth-creds=foo:bar\\ndummy line') == 'sqlmap.py -u ************************** --auth-type=***** --auth-creds=*******\\ndummy line'
+    >>> maskSensitiveData('gensql.py -u test.com/index.go?id=index --auth-type=basic --auth-creds=foo:bar\\ndummy line') == 'gensql.py -u ************************** --auth-type=***** --auth-creds=*******\\ndummy line'
     True
     """
 

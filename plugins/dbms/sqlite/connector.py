@@ -54,7 +54,7 @@ class Connector(GenericConnector):
                 try:
                     import sqlite
                 except ImportError:
-                    errMsg = "sqlmap requires 'python-sqlite' third-party library "
+                    errMsg = "GenSQL requires 'python-sqlite' third-party library "
                     errMsg += "in order to directly connect to the database '%s'" % self.db
                     raise SqlmapMissingDependence(errMsg)
 

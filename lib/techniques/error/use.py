@@ -351,7 +351,7 @@ def errorUse(expression, dump=False):
             elif count and not count.isdigit():
                 warnMsg = "it was not possible to count the number "
                 warnMsg += "of entries for the SQL query provided. "
-                warnMsg += "sqlmap will assume that it returns only "
+                warnMsg += "GenSQL will assume that it returns only "
                 warnMsg += "one entry"
                 logger.warning(warnMsg)
 
@@ -442,7 +442,7 @@ def errorUse(expression, dump=False):
 
                 except KeyboardInterrupt:
                     abortedFlag = True
-                    warnMsg = "user aborted during enumeration. sqlmap "
+                    warnMsg = "user aborted during enumeration. GenSQL "
                     warnMsg += "will display partial output"
                     logger.warning(warnMsg)
 

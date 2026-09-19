@@ -204,7 +204,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
 
     if len(expressionFieldsList) > 1:
         infoMsg = "the SQL query provided has more than one field. "
-        infoMsg += "sqlmap will now unpack it into distinct queries "
+        infoMsg += "GenSQL will now unpack it into distinct queries "
         infoMsg += "to be able to retrieve the output even if we "
         infoMsg += "are going blind"
         logger.info(infoMsg)
@@ -260,7 +260,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
                             elif isDigit(choice) and int(choice) > 0 and int(choice) <= count:
                                 stopLimit = int(choice)
 
-                                infoMsg = "sqlmap is now going to retrieve the "
+                                infoMsg = "GenSQL is now going to retrieve the "
                                 infoMsg += "first %d query output entries" % stopLimit
                                 logger.info(infoMsg)
 
@@ -286,7 +286,7 @@ def _goInferenceProxy(expression, fromUser=False, batch=False, unpack=True, char
                     elif count and not isDigit(count):
                         warnMsg = "it was not possible to count the number "
                         warnMsg += "of entries for the SQL query provided. "
-                        warnMsg += "sqlmap will assume that it returns only "
+                        warnMsg += "GenSQL will assume that it returns only "
                         warnMsg += "one entry"
                         logger.warning(warnMsg)
 

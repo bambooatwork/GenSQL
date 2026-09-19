@@ -491,7 +491,7 @@ class Databases(object):
 
         if conf.db is None or conf.db == CURRENT_DB:
             if conf.db is None:
-                warnMsg = "missing database parameter. sqlmap is going "
+                warnMsg = "missing database parameter. GenSQL is going "
                 warnMsg += "to use the current database to enumerate "
                 warnMsg += "table(s) columns"
                 logger.warning(warnMsg)
@@ -1067,7 +1067,7 @@ class Databases(object):
 
     def getCount(self):
         if not conf.tbl:
-            warnMsg = "missing table parameter, sqlmap will retrieve "
+            warnMsg = "missing table parameter, GenSQL will retrieve "
             warnMsg += "the number of entries for all database "
             warnMsg += "management system databases' tables"
             logger.warning(warnMsg)
@@ -1077,7 +1077,7 @@ class Databases(object):
                 conf.db, conf.tbl = conf.tbl.split('.', 1)
 
         if conf.tbl is not None and conf.db is None and Backend.getIdentifiedDbms() not in (DBMS.SQLITE, DBMS.ACCESS, DBMS.FIREBIRD, DBMS.MCKOI, DBMS.EXTREMEDB):
-            warnMsg = "missing database parameter. sqlmap is going to "
+            warnMsg = "missing database parameter. GenSQL is going to "
             warnMsg += "use the current database to retrieve the "
             warnMsg += "number of entries for table '%s'" % unsafeSQLIdentificatorNaming(conf.tbl)
             logger.warning(warnMsg)

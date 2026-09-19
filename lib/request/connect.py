@@ -949,7 +949,7 @@ class Connect(object):
                     else:
                         warnMsg = "unable to connect to the target URL (%d - %s)" % (ex.code, _http_client.responses[ex.code])
                         if threadData.retriesCount < conf.retries and not kb.threadException:
-                            warnMsg += ". sqlmap is going to retry the request"
+                            warnMsg += ". GenSQL is going to retry the request"
                             logger.critical(warnMsg)
                             return Connect._retryProxy(**kwargs)
                         elif kb.testMode:
@@ -1050,7 +1050,7 @@ class Connect(object):
             elif ignoreTimeout and any(_ in tbMsg for _ in ("timed out", "IncompleteRead", "Interrupted system call")):
                 return None if not conf.ignoreTimeouts else "", None, None
             elif threadData.retriesCount < conf.retries and not kb.threadException:
-                warnMsg += ". sqlmap is going to retry the request"
+                warnMsg += ". GenSQL is going to retry the request"
                 if not retrying:
                     warnMsg += "(s)"
                     logger.critical(warnMsg)
@@ -1376,7 +1376,7 @@ class Connect(object):
 
                 if attempt > 0:
                     warnMsg = "unable to find anti-CSRF token '%s' at '%s'" % (conf.csrfToken._original, conf.csrfUrl or conf.url)
-                    warnMsg += ". sqlmap is going to retry the request"
+                    warnMsg += ". GenSQL is going to retry the request"
                     logger.warning(warnMsg)
 
                 page, headers, code = Connect.getPage(url=conf.csrfUrl or conf.url, post=conf.csrfData or (conf.data if conf.csrfUrl == conf.url and (conf.csrfMethod or "").upper() == HTTPMETHOD.POST else None), method=conf.csrfMethod or (conf.method if conf.csrfUrl == conf.url else None), cookie=conf.parameters.get(PLACE.COOKIE), direct=True, silent=True, ua=conf.parameters.get(PLACE.USER_AGENT), referer=conf.parameters.get(PLACE.REFERER), host=conf.parameters.get(PLACE.HOST))

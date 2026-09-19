@@ -212,7 +212,7 @@ class Web(object):
                 break
 
         if not kb.absFilePaths:
-            message = "do you want sqlmap to further try to "
+            message = "do you want GenSQL to further try to "
             message += "provoke the full path disclosure? [Y/n] "
 
             if readInput(message, default='Y', boolean=True):

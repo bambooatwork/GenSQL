@@ -180,7 +180,7 @@ class Abstraction(Web, UDF, XP_cmdshell):
             return
 
         if not conf.direct and not isStackingAvailable():
-            errMsg = "stacked queries are not supported hence sqlmap cannot "
+            errMsg = "stacked queries are not supported hence GenSQL cannot "
             errMsg += "execute statements as another user. The execution "
             errMsg += "will continue and the DBMS credentials provided "
             errMsg += "will simply be ignored"

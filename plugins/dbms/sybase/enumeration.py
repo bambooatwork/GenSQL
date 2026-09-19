@@ -57,7 +57,7 @@ class Enumeration(GenericEnumeration):
 
     def getPrivileges(self, *args, **kwargs):
         warnMsg = "on Sybase it is not possible to fetch "
-        warnMsg += "database users privileges, sqlmap will check whether "
+        warnMsg += "database users privileges, GenSQL will check whether "
         warnMsg += "or not the database users are database administrators"
         logger.warning(warnMsg)
 
@@ -166,7 +166,7 @@ class Enumeration(GenericEnumeration):
 
         if conf.db is None or conf.db == CURRENT_DB:
             if conf.db is None:
-                warnMsg = "missing database parameter. sqlmap is going "
+                warnMsg = "missing database parameter. GenSQL is going "
                 warnMsg += "to use the current database to enumerate "
                 warnMsg += "table(s) columns"
                 logger.warning(warnMsg)

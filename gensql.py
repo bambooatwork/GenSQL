@@ -625,13 +625,15 @@ def _map_to_core_flags(o):
     extras = []
 
     # Speed presets → delay + concurrent
-    speed_map = {"slow": ("3", "5"), "normal": ("0", "20"),
-                 "fast": ("0", "50"), "turbo": ("0", "100")}
+    # Note: sqlmap's max threads is 10 (beyond that it warns)
+    speed_map = {"slow": ("3", None), "normal": (None, None),
+                 "fast": ("0", "5"), "turbo": ("0", "10")}
     if hasattr(o, "speed") and o.speed in speed_map:
         delay, thr = speed_map[o.speed]
-        if delay != "0":
+        if delay and delay != "0":
             extras += ["--delay", delay]
-        extras += ["--threads", thr]
+        if thr:
+            extras += ["--threads", thr]
 
     # level/risk
     if getattr(o, "level", 1) > 1:

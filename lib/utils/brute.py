@@ -158,7 +158,7 @@ def tableExists(tableFile, regex=None):
             runThreads(conf.threads, tableExistsThread, threadChoice=True)
         except KeyboardInterrupt:
             warnMsg = "user aborted during table existence "
-            warnMsg += "check. sqlmap will display partial output"
+            warnMsg += "check. GenSQL will display partial output"
             logger.warning(warnMsg)
 
         clearConsoleLine(True)
@@ -281,7 +281,7 @@ def columnExists(columnFile, regex=None):
             runThreads(conf.threads, columnExistsThread, threadChoice=True)
         except KeyboardInterrupt:
             warnMsg = "user aborted during column existence "
-            warnMsg += "check. sqlmap will display partial output"
+            warnMsg += "check. GenSQL will display partial output"
             logger.warning(warnMsg)
         finally:
             kb.bruteMode = False
@@ -395,7 +395,7 @@ def fileExists(pathFile):
         runThreads(conf.threads, fileExistsThread, threadChoice=True)
     except KeyboardInterrupt:
         warnMsg = "user aborted during file existence "
-        warnMsg += "check. sqlmap will display partial output"
+        warnMsg += "check. GenSQL will display partial output"
         logger.warning(warnMsg)
     finally:
         kb.bruteMode = False

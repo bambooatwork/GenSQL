@@ -309,7 +309,7 @@ def _unionPosition(comment, place, parameter, prefix, suffix, count, where=PAYLO
 
                 if unionErrorCase and count > 1:
                     warnMsg = "combined UNION/error-based SQL injection case found on "
-                    warnMsg += "column %d. sqlmap will try to find another " % (position + 1)
+                    warnMsg += "column %d. GenSQL will try to find another " % (position + 1)
                     warnMsg += "column with better characteristics"
                     logger.warning(warnMsg)
                 else:

@@ -61,7 +61,7 @@ def checkDependencies():
             elif dbmsName == DBMS.CLICKHOUSE:
                 __import__("clickhouse_connect")
         except:
-            warnMsg = "sqlmap requires '%s' third-party library " % data[1]
+            warnMsg = "GenSQL requires '%s' third-party library " % data[1]
             warnMsg += "in order to directly connect to the DBMS "
             warnMsg += "'%s'. Download from '%s'" % (dbmsName, data[2])
             logger.warning(warnMsg)
@@ -77,7 +77,7 @@ def checkDependencies():
         debugMsg = "'python-impacket' third-party library is found"
         logger.debug(debugMsg)
     except ImportError:
-        warnMsg = "sqlmap requires 'python-impacket' third-party library for "
+        warnMsg = "GenSQL requires 'python-impacket' third-party library for "
         warnMsg += "out-of-band takeover feature. Download from "
         warnMsg += "'https://github.com/coresecurity/impacket'"
         logger.warning(warnMsg)
@@ -88,7 +88,7 @@ def checkDependencies():
         debugMsg = "'tkinter' library is found"
         logger.debug(debugMsg)
     except ImportError:
-        warnMsg = "sqlmap requires 'tkinter' library "
+        warnMsg = "GenSQL requires 'tkinter' library "
         warnMsg += "if you plan to run a GUI"
         logger.warning(warnMsg)
         missing_libraries.add('tkinter')
@@ -98,7 +98,7 @@ def checkDependencies():
         debugMsg = "'tkinter.ttk' library is found"
         logger.debug(debugMsg)
     except ImportError:
-        warnMsg = "sqlmap requires 'tkinter.ttk' library "
+        warnMsg = "GenSQL requires 'tkinter.ttk' library "
         warnMsg += "if you plan to run a GUI"
         logger.warning(warnMsg)
         missing_libraries.add('tkinter.ttk')
@@ -109,8 +109,8 @@ def checkDependencies():
             debugMsg = "'python-pyreadline' third-party library is found"
             logger.debug(debugMsg)
         except ImportError:
-            warnMsg = "sqlmap requires 'pyreadline' third-party library to "
-            warnMsg += "be able to take advantage of the sqlmap TAB "
+            warnMsg = "GenSQL requires 'pyreadline' third-party library to "
+            warnMsg += "be able to take advantage of the GenSQL TAB "
             warnMsg += "completion and history support features in the SQL "
             warnMsg += "shell and OS shell. Download from "
             warnMsg += "'https://pypi.org/project/pyreadline/'"

@@ -38,7 +38,7 @@ class Fingerprint(object):
         pass
 
     def userChooseDbmsOs(self):
-        warnMsg = "for some reason sqlmap was unable to fingerprint "
+        warnMsg = "for some reason GenSQL was unable to fingerprint "
         warnMsg += "the back-end DBMS operating system"
         logger.warning(warnMsg)
 

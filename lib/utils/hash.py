@@ -1385,7 +1385,7 @@ def dictionaryAttack(attack_dict):
                     infoMsg = "using hash method '%s'" % __functions__[regex].__name__
                     logger.info(infoMsg)
                 else:
-                    warnMsg = "sqlmap identified a hash that cannot be cracked with the built-in dictionary attack"
+                    warnMsg = "GenSQL identified a hash that cannot be cracked with the built-in dictionary"
                     if regex in HASHCAT_MODES:
                         warnMsg += " (use e.g. 'hashcat -m %d')" % HASHCAT_MODES[regex]
                     singleTimeWarnMessage(warnMsg)

@@ -332,7 +332,7 @@ def _setRequestParams():
                         if "=%s" % kb.customInjectionMark in _:
                             warnMsg = "it seems that you've provided empty parameter value(s) "
                             warnMsg += "for testing. Please, always use only valid parameter values "
-                            warnMsg += "so sqlmap could be able to run properly"
+                            warnMsg += "so GenSQL could run properly"
                             logger.warning(warnMsg)
 
             if not kb.processUserMarks:
@@ -469,7 +469,7 @@ def _setRequestParams():
             for parameter in conf.paramDict.get(place, {}):
                 if any(parameter.lower().count(_) for _ in CSRF_TOKEN_PARAMETER_INFIXES):
                     message = "%sparameter '%s' appears to hold anti-CSRF token. " % ("%s " % place if place != parameter else "", parameter)
-                    message += "Do you want sqlmap to automatically update it in further requests? [y/N] "
+                    message += "Do you want GenSQL to automatically update it in further requests? [y/N] "
 
                     if readInput(message, default='N', boolean=True):
                         class _(six.text_type):
@@ -577,7 +577,7 @@ def _resumeDBMS():
         if not check:
             message = "you provided '%s' as a back-end DBMS, " % conf.dbms
             message += "but from a past scan information on the target URL "
-            message += "sqlmap assumes the back-end DBMS is '%s'. " % dbms
+            message += "GenSQL assumes the back-end DBMS is '%s'. " % dbms
             message += "Do you really want to force the back-end "
             message += "DBMS value? [y/N] "
 
@@ -611,7 +611,7 @@ def _resumeOS():
         if conf.os and conf.os.lower() != os.lower():
             message = "you provided '%s' as back-end DBMS operating " % conf.os
             message += "system, but from a past scan information on the "
-            message += "target URL sqlmap assumes the back-end DBMS "
+            message += "target URL GenSQL assumes the back-end DBMS "
             message += "operating system is %s. " % os
             message += "Do you really want to force the back-end DBMS "
             message += "OS value? [y/N] "

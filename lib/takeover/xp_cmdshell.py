@@ -259,7 +259,7 @@ class XP_cmdshell(object):
 
             else:
                 message = "xp_cmdshell extended procedure does not seem to "
-                message += "be available. Do you want sqlmap to try to "
+                message += "be available. Do you want GenSQL to try to "
                 message += "re-enable it? [Y/n] "
 
                 if readInput(message, default='Y', boolean=True):

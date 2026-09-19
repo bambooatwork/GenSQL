@@ -799,7 +799,7 @@ def _oobConsent():
     if conf.get("oobServer"):
         return True
     if _OOB_CONSENT is None:
-        message = "do you want sqlmap to use a public out-of-band service "
+        message = "do you want GenSQL to use a public out-of-band service "
         message += "(interactsh/webhook.site) for blind XXE? [y/N] "
         _OOB_CONSENT = readInput(message, default='N', boolean=True)
     return _OOB_CONSENT
